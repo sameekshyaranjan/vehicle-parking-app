@@ -8,6 +8,7 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 import redis
 from .celery_app import celery_app
+from .database import sqlalchemy_database_url
 from .tasks.celery_config import configure_celery
 dotenv.load_dotenv()
 db = SQLAlchemy()
@@ -17,7 +18,8 @@ def register_commands(app):
 def create_app(config_name='development'):
     instance_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'instance')
     app = Flask(__name__, instance_path=instance_path)
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("SQLALCHEMY_DATABASE_URI", 'sqlite:///parking.db')
+    database_url = os.environ.get('SQLALCHEMY_DATABASE_URI') or os.environ.get('DATABASE_URL')
+    app.config['SQLALCHEMY_DATABASE_URI'] = sqlalchemy_database_url(database_url or 'sqlite:///parking.db')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key')
     app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'jwt-secret-string-change-in-production')
@@ -100,6 +102,8 @@ def register_commands(app):
     @app.cli.command("init-db")
     def init_db_command():
         with app.app_context():
+            if db.engine.dialect.name != 'sqlite':
+                raise ClickException('Apply the PostgreSQL schema with npm run db:deploy.')
             db.create_all()
         print("✅ Database tables created successfully!")
     @app.cli.command("create-admin")

@@ -7,7 +7,7 @@ def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         verify_jwt_in_request()
-        current_user_id = get_jwt_identity()
+        current_user_id = int(get_jwt_identity())
         user = User.query.get(current_user_id)
         
         if not user or not user.is_admin:
@@ -24,7 +24,7 @@ def user_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         verify_jwt_in_request()
-        current_user_id = get_jwt_identity()
+        current_user_id = int(get_jwt_identity())
         user = User.query.get(current_user_id)
         if not user:
             return jsonify({

@@ -2,7 +2,11 @@ venv
 .venv/
 .env
 node_modules
-frontend/.npm-cache/
+.npm-cache/
+.postgres-test/
+*.sqlite
+*.sqlite3
+*.db
 backend/instance/
 __pycache__/
 *.py[cod]

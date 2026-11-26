@@ -108,7 +108,7 @@ vehicle_parking_app/
 
 - Python and pip. This setup was verified with Python 3.14.
 - Node.js and npm. Node.js 22 is within the engine range declared by the Vue CLI dependency tree.
-- SQLite is included with Python. Redis and a Celery worker are optional for the core web app.
+- SQLite is included with Python. PostgreSQL is supported when configured. Redis and a Celery worker are optional for the core web app.
 
 ## Installation
 
@@ -135,7 +135,7 @@ npm.cmd ci
 ## Configuration
 
 The default settings are sufficient for a local run. Flask loads optional values
-from a root `.env` file. It reads `SQLALCHEMY_DATABASE_URI`, `SECRET_KEY`,
+from a root `.env` file. It reads `DATABASE_URL`, `SQLALCHEMY_DATABASE_URI`, `SECRET_KEY`,
 `JWT_SECRET_KEY`, `REDIS_URL`, `CELERY_BROKER_URL`, and `CELERY_RESULT_BACKEND`.
 The default Redis endpoint is `localhost:6379`. The Flask API uses port 5000
 and the Vue development server uses port 8080.
@@ -170,12 +170,82 @@ Create the demo accounts from the project root:
 Add `PARKSMART_DEMO_LOGIN=1` to the root `.env` file and restart Flask. Open
 [the login page](http://localhost:8080/login) and select **Sign in as Demo User**
 or **Sign in as Demo Admin**. Each button signs in to a dedicated account in
-the local SQLite database. Demo sign-in is available on the local development
+the configured database. Demo sign-in is available on the local development
 app at port 8080 when enabled.
 
 Redis provides caching and backs the optional Celery worker. Account registration,
 parking reservations, and direct CSV download work without a Redis server.
 Automated email and scheduled reporting require further integration in this checkout.
+
+## PostgreSQL migration on Windows
+
+Use a PostgreSQL server and a dedicated database for ParkSmart. The role applying
+migrations and running the import needs to own the target tables and sequences.
+Use Node.js 22.12+ on the 22 line or Node.js 24 for the root Prisma tools. The Vue
+dependencies still install separately in `frontend`.
+
+Prisma reads `DATABASE_URL` from the shell or the root `.env`. Flask and its
+Celery worker use `SQLALCHEMY_DATABASE_URI` first, then `DATABASE_URL`, and
+default to `backend/instance/parking.db` if both are unset. Use a plain
+`postgresql://` URL targeting the `public` schema. URL-encode any special
+characters in the password. Flask uses Psycopg for that URL. Keep credentials
+in the environment or the ignored `.env` file. Prisma owns PostgreSQL schema
+changes. Flask's `init-db` command is for SQLite.
+
+### Rehearse the migration
+
+From the project root, create a PostgreSQL rehearsal database and use its URL in
+a separate PowerShell terminal. Here `parking.db` is the default SQLite file.
+If the running app points elsewhere, use that SQLite path for the backup.
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+npm.cmd ci
+$env:DATABASE_URL = 'postgresql://USER:URL_ENCODED_PASSWORD@localhost:5432/parksmart_rehearsal'
+$snapshot = 'backend/instance/backups/parksmart-rehearsal.sqlite3'
+.\.venv\Scripts\python.exe -m scripts.backup_sqlite backend/instance/parking.db $snapshot
+npm.cmd run db:validate
+npm.cmd run db:deploy
+npm.cmd run db:status
+.\.venv\Scripts\python.exe -m scripts.import_sqlite --source $snapshot
+.\.venv\Scripts\python.exe -m scripts.import_sqlite --source $snapshot --verify-only
+```
+
+The import copies all four tables by ID in one transaction, checks every field
+against the snapshot, and advances the PostgreSQL sequences. It can be rerun on
+an identical destination and refuses to overwrite different data. Foreign-key
+violations and duplicate active reservations must be resolved before import.
+Existing timestamps remain local wall-clock values with microsecond precision.
+If an admin later removes a spot while resizing a lot, PostgreSQL retains its
+completed reservations and clears their reference to that spot.
+
+To run the integration test suite, apply the Prisma migration to a **separate
+empty database** and pass its URL with `PARKSMART_TEST_DATABASE_URL`. The test
+creates and exercises its own data, including concurrent booking requests.
+
+```powershell
+$env:DATABASE_URL = 'postgresql://USER:URL_ENCODED_PASSWORD@localhost:5432/parksmart_integration'
+npm.cmd run db:deploy
+$env:PARKSMART_TEST_DATABASE_URL = $env:DATABASE_URL
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+### Cutover and rollback
+
+After approving the cutover, stop Flask and any workers so the old database
+stops receiving writes. Take a fresh SQLite backup under a new filename. Apply
+the migrations to an empty PostgreSQL target, import the fresh backup, and run
+`--verify-only`. Set the approved `DATABASE_URL` for Flask and the worker,
+remove any SQLite `SQLALCHEMY_DATABASE_URI` override, and keep the existing JWT
+and secret keys. Restart the services and smoke-test both login modes, demo
+accounts, and bookings. Clear or isolate any shared Redis parking data cache at
+cutover so it reflects the new database.
+
+To roll back before PostgreSQL has accepted new app writes, stop the services,
+restore the previous SQLite connection settings, clear the parking cache, and
+restart. If PostgreSQL has accepted writes, stop writes and export that database
+first. Reconcile those changes before returning traffic to SQLite. The original
+SQLite database and its backup should be retained until cutover is accepted.
 
 ## 🔌 API Endpoints
 
@@ -206,12 +276,12 @@ Automated email and scheduled reporting require further integration in this chec
 ```python
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(64), unique=True)
-    password = db.Column(db.String(128))
-    fullname = db.Column(db.String(128))
-    email = db.Column(db.String(128), unique=True)
-    address = db.Column(db.String(256))
-    pin_code = db.Column(db.String(10))
+    username = db.Column(db.Text, unique=True)
+    password = db.Column(db.Text)
+    fullname = db.Column(db.Text)
+    email = db.Column(db.Text, unique=True)
+    address = db.Column(db.Text)
+    pin_code = db.Column(db.Text)
     is_admin = db.Column(db.Boolean, default=False)
 ```
 
@@ -219,10 +289,10 @@ class User(db.Model):
 ```python
 class ParkingLot(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    prime_location_name = db.Column(db.String(128))
+    prime_location_name = db.Column(db.Text)
     price = db.Column(db.Float)
-    address = db.Column(db.String(256))
-    pin_code = db.Column(db.String(10))
+    address = db.Column(db.Text)
+    pin_code = db.Column(db.Text)
     number_of_spots = db.Column(db.Integer)
 ```
 
@@ -231,7 +301,7 @@ class ParkingLot(db.Model):
 class ParkingSpot(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     lot_id = db.Column(db.Integer, db.ForeignKey('parking_lot.id'))
-    status = db.Column(db.String(1), default='A')  # 'A' for available, 'O' for occupied
+    status = db.Column(db.Text, default='A')  # 'A' for available, 'O' for occupied
     spot_number = db.Column(db.Integer)
 ```
 
@@ -240,11 +310,12 @@ class ParkingSpot(db.Model):
 class Reservation(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    spot_id = db.Column(db.Integer, db.ForeignKey('parking_spot.id'))
-    vehicle_number = db.Column(db.String(20))
-    parking_timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    spot_id = db.Column(db.Integer, db.ForeignKey('parking_spot.id', ondelete='SET NULL'))
+    vehicle_number = db.Column(db.Text)
+    parking_timestamp = db.Column(db.DateTime, default=get_ist_time)
     leaving_timestamp = db.Column(db.DateTime, nullable=True)
     parking_cost = db.Column(db.Float, nullable=True)
+    remarks = db.Column(db.Text, nullable=True)
 ```
 
 ## 🔄 Celery Tasks

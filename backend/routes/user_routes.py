@@ -2,6 +2,7 @@ import math
 from flask import Blueprint, request, jsonify, current_app, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, and_
+from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timedelta
 import json
 import io
@@ -19,7 +20,7 @@ def user_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         try:
-            current_user_id = get_jwt_identity()
+            current_user_id = int(get_jwt_identity())
             if not current_user_id:
                 return error_response('Authentication required', 401)
             return f(*args, **kwargs)
@@ -43,7 +44,7 @@ def error_response(message, status_code=400):
 @user_required
 def user_dashboard():
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())
         user = User.query.get(user_id)
         total_bookings = Reservation.query.filter_by(user_id=user_id).count()
         active_bookings = Reservation.query.filter_by(
@@ -92,15 +93,17 @@ def user_dashboard():
                 'current_cost': current_cost
             }
         recent_bookings = Reservation.query.filter_by(user_id=user_id)\
-            .order_by(Reservation.parking_timestamp.desc())\
+            .order_by(Reservation.parking_timestamp.desc().nulls_last())\
             .limit(5).all()
         recent_bookings_data = []
         for booking in recent_bookings:
+            spot = booking.spot
+            lot = spot.parking_lot if spot else None
             recent_bookings_data.append({
                 'id': booking.id,
-                'lot_name': booking.spot.parking_lot.prime_location_name,
-                'spot_number': booking.spot.spot_number,
-                'date': booking.parking_timestamp.isoformat(),
+                'lot_name': lot.prime_location_name if lot else 'Removed parking spot',
+                'spot_number': spot.spot_number if spot else None,
+                'date': booking.parking_timestamp.isoformat() if booking.parking_timestamp else None,
                 'cost': booking.parking_cost,
                 'status': 'Active' if not booking.leaving_timestamp else 'Completed'
             })
@@ -170,14 +173,14 @@ def user_dashboard():
 @user_required
 def extend_booking(booking_id):
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())
         data = request.get_json()
         additional_hours = data.get('additional_hours', 1)
         reservation = Reservation.query.filter_by(
             id=booking_id,
             user_id=user_id,
             leaving_timestamp=None
-        ).first()
+        ).with_for_update().first()
         if not reservation:
             return error_response("Active reservation not found", 404)
         hourly_rate = reservation.spot.parking_lot.price
@@ -232,19 +235,22 @@ def get_available_parking_lots():
 @user_required
 def book_parking_spot():
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())
         data = request.get_json()
         if 'lot_id' not in data or 'vehicle_number' not in data:
             return error_response("Lot ID and vehicle number are required", 400)
-        lot_id = data['lot_id']
+        lot_id = int(data['lot_id'])
         vehicle_number = data['vehicle_number'].strip().upper()
+        # Serialize booking attempts by the same user, including across different lots.
+        db.session.query(User.id).filter_by(id=user_id).with_for_update().one()
         active_booking = Reservation.query.filter_by(
             user_id=user_id,
             leaving_timestamp=None
         ).first()
         if active_booking:
             return error_response("You already have an active parking reservation", 400)
-        lot = ParkingLot.query.get_or_404(lot_id)
+        # Lot edits and bookings take this lock before checking spot availability.
+        lot = ParkingLot.query.filter_by(id=lot_id).with_for_update().first_or_404()
         available_spot = ParkingSpot.query.filter_by(
             lot_id=lot_id,
             status='A'
@@ -260,17 +266,28 @@ def book_parking_spot():
         )
         available_spot.status = 'O'
         db.session.add(reservation)
-        db.session.commit()
-        if current_app.redis:
-            current_app.redis.delete("available_parking_lots")
-            current_app.redis.delete("admin_dashboard_stats")
-        return success_response({
+        db.session.flush()
+        booking = {
             'reservation_id': reservation.id,
             'spot_number': available_spot.spot_number,
             'lot_name': lot.prime_location_name,
             'parking_cost': lot.price,
             'message': f"Parking spot {available_spot.spot_number} booked successfully"
-        }, "Parking spot booked successfully", 201)
+        }
+        db.session.commit()
+        if current_app.redis:
+            current_app.redis.delete("available_parking_lots")
+            current_app.redis.delete("admin_dashboard_stats")
+        return success_response(booking, "Parking spot booked successfully", 201)
+    except IntegrityError as e:
+        db.session.rollback()
+        constraint = getattr(getattr(e.orig, 'diag', None), 'constraint_name', None)
+        if constraint == 'reservation_one_active_per_user':
+            return error_response("You already have an active parking reservation", 400)
+        if constraint == 'reservation_one_active_per_spot':
+            return error_response("No available parking spots in this lot", 400)
+        current_app.logger.error("Database integrity error while booking parking")
+        return error_response("Failed to book parking spot", 500)
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Book parking error: {str(e)}")
@@ -292,12 +309,12 @@ def release_parking_spot(reservation_id):
     if rating is None:
         return error_response("A 'rating' is required in the request body", 400)
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())
         reservation = Reservation.query.filter_by(
             id=reservation_id,
             user_id=user_id,
             leaving_timestamp=None
-        ).first()
+        ).with_for_update().first()
         if not reservation:
             return error_response(f"No active reservation found with ID {reservation_id}", 404)
         leaving_time = datetime.utcnow() + timedelta(hours=5, minutes=30)
@@ -310,14 +327,15 @@ def release_parking_spot(reservation_id):
         reservation.parking_cost = final_cost
         reservation.remarks = f"User Rating: {rating}/5"
         reservation.spot.status = 'A'
+        spot_number = reservation.spot.spot_number
         db.session.commit()
         current_app.logger.info("--- Release Parking Request Success ---")
         return success_response({
             'message': 'Parking spot released successfully!',
-            'reservation_id': reservation.id,
+            'reservation_id': reservation_id,
             'final_cost': final_cost,
             'duration_hours': hours_parked,
-            'spot_number': reservation.spot.spot_number,
+            'spot_number': spot_number,
         })
     except Exception as e:
         db.session.rollback()
@@ -328,28 +346,28 @@ def release_parking_spot(reservation_id):
 @user_required
 def get_user_bookings():
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 10, type=int)
         bookings = Reservation.query.filter_by(user_id=user_id)\
-            .order_by(Reservation.parking_timestamp.desc())\
+            .order_by(Reservation.parking_timestamp.desc().nulls_last())\
             .paginate(page=page, per_page=per_page, error_out=False)
         bookings_data = []
         for booking in bookings.items:
             duration_hours = 0
-            if booking.leaving_timestamp:
-                duration = booking.leaving_timestamp - booking.parking_timestamp
+            if booking.parking_timestamp:
+                end = booking.leaving_timestamp or (datetime.utcnow() + timedelta(hours=5, minutes=30))
+                duration = end - booking.parking_timestamp
                 duration_hours = round(duration.total_seconds() / 3600, 1)
-            elif booking.parking_timestamp:
-                duration = (datetime.utcnow() + timedelta(hours=5, minutes=30)) - booking.parking_timestamp
-                duration_hours = round(duration.total_seconds() / 3600, 1)
+            spot = booking.spot
+            lot = spot.parking_lot if spot else None
             bookings_data.append({
                 'id': booking.id,
-                'lot_name': booking.spot.parking_lot.prime_location_name,
-                'lot_address': booking.spot.parking_lot.address,
-                'spot_number': booking.spot.spot_number,
+                'lot_name': lot.prime_location_name if lot else 'Removed parking spot',
+                'lot_address': lot.address if lot else None,
+                'spot_number': spot.spot_number if spot else None,
                 'vehicle_number': booking.vehicle_number,
-                'parking_timestamp': booking.parking_timestamp.isoformat(),
+                'parking_timestamp': booking.parking_timestamp.isoformat() if booking.parking_timestamp else None,
                 'leaving_timestamp': booking.leaving_timestamp.isoformat() if booking.leaving_timestamp else None,
                 'duration_hours': duration_hours,
                 'parking_cost': booking.parking_cost,
@@ -375,11 +393,11 @@ def get_user_bookings():
 @user_required
 def export_parking_history():
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())
         user = User.query.get(user_id)
         if not user:
             return error_response("User not found", 404)
-        reservations = Reservation.query.filter_by(user_id=user_id).order_by(Reservation.parking_timestamp.desc()).all()
+        reservations = Reservation.query.filter_by(user_id=user_id).order_by(Reservation.parking_timestamp.desc().nulls_last()).all()
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow(['Slot ID', 'Spot ID', 'Vehicle Number', 'Parking In', 'Parking Out', 'Cost', 'Remarks'])
@@ -408,7 +426,7 @@ def export_parking_history():
 @user_required
 def get_user_statistics():
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())
         monthly_stats = []
         for i in range(6):
             current_date = datetime.now().replace(day=1) - timedelta(days=i*30)
@@ -458,7 +476,7 @@ def get_user_statistics():
 @user_required
 def get_active_reservation():
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())
         active_reservation = Reservation.query.filter_by(
             user_id=user_id,
             leaving_timestamp=None
@@ -519,7 +537,7 @@ def quick_search():
 @user_required
 def get_detailed_statistics():
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())
         time_range = request.args.get('time_range', '30d')
         end_date = datetime.now()
         if time_range == '7d':
@@ -694,7 +712,7 @@ def get_detailed_statistics():
         for location, visits, spent in top_locations_query:
             avg_duration = 0
             location_reservations = [r for r in reservations
-                                   if r.spot.parking_lot.prime_location_name == location]
+                                   if r.spot and r.spot.parking_lot and r.spot.parking_lot.prime_location_name == location]
             if location_reservations:
                 total_duration = sum([(r.leaving_timestamp - r.parking_timestamp).total_seconds() / 3600
                                     for r in location_reservations
@@ -739,7 +757,7 @@ def get_detailed_statistics():
 @user_required
 def export_user_report():
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())
         data = request.get_json()
         time_range = data.get('time_range', '30d')
         return success_response({

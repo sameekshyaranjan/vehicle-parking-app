@@ -187,7 +187,7 @@ def admin_login():
 @jwt_required(refresh=True)
 def refresh():
     try:
-        current_user_id = get_jwt_identity()
+        current_user_id = int(get_jwt_identity())
         user = User.query.get(current_user_id)
         if not user:
             return jsonify({
@@ -218,7 +218,7 @@ def refresh():
 @jwt_required()
 def logout():
     try:
-        current_user_id = get_jwt_identity()
+        current_user_id = int(get_jwt_identity())
         jti = get_jwt()['jti']
         if current_app.redis:
             current_app.redis.setex(
@@ -241,7 +241,7 @@ def logout():
 @jwt_required()
 def get_current_user():
     try:
-        current_user_id = get_jwt_identity()
+        current_user_id = int(get_jwt_identity())
         user = User.query.get(current_user_id)
         if not user:
             return jsonify({
@@ -274,7 +274,7 @@ def get_current_user():
 @jwt_required()
 def change_password():
     try:
-        current_user_id = get_jwt_identity()
+        current_user_id = int(get_jwt_identity())
         user = User.query.get(current_user_id)
         if not user:
             return jsonify({

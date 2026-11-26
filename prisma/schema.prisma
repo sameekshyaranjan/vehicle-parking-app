@@ -1,0 +1,63 @@
+generator client {
+  provider        = "prisma-client"
+  output          = "../node_modules/.prisma/parksmart"
+  previewFeatures = ["partialIndexes"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           Int           @id @default(autoincrement())
+  username     String?       @unique(map: "user_username_key")
+  password     String?       @db.Text
+  fullname     String?
+  email        String?       @unique(map: "user_email_key")
+  address      String?
+  pin_code     String?
+  is_admin     Boolean?
+  reservations Reservation[]
+
+  @@map("user")
+}
+
+model ParkingLot {
+  id                  Int           @id @default(autoincrement())
+  prime_location_name String?
+  price               Float?        @db.DoublePrecision
+  address             String?
+  pin_code            String?
+  number_of_spots     Int?
+  spots               ParkingSpot[]
+
+  @@map("parking_lot")
+}
+
+model ParkingSpot {
+  id           Int           @id @default(autoincrement())
+  lot_id       Int?
+  status       String?
+  spot_number  Int?
+  lot          ParkingLot?   @relation(fields: [lot_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reservations Reservation[]
+
+  @@map("parking_spot")
+}
+
+model Reservation {
+  id                Int          @id @default(autoincrement())
+  user_id           Int?
+  spot_id           Int?
+  vehicle_number    String?
+  parking_timestamp DateTime?    @db.Timestamp(6)
+  leaving_timestamp DateTime?    @db.Timestamp(6)
+  parking_cost      Float?       @db.DoublePrecision
+  remarks           String?
+  user              User?        @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  spot              ParkingSpot? @relation(fields: [spot_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@unique([spot_id], map: "reservation_one_active_per_spot", where: raw("(leaving_timestamp IS NULL)"))
+  @@unique([user_id], map: "reservation_one_active_per_user", where: raw("(leaving_timestamp IS NULL)"))
+  @@map("reservation")
+}

@@ -2,10 +2,10 @@ from ..app import db
 class ParkingLot(db.Model):
     __tablename__ = 'parking_lot'
     id = db.Column(db.Integer, primary_key=True)
-    prime_location_name = db.Column(db.String(128))
+    prime_location_name = db.Column(db.Text)
     price = db.Column(db.Float)
-    address = db.Column(db.String(256))
-    pin_code = db.Column(db.String(10))
+    address = db.Column(db.Text)
+    pin_code = db.Column(db.Text)
     number_of_spots = db.Column(db.Integer)
     spots = db.relationship('ParkingSpot', backref='parking_lot', lazy=True, cascade="all, delete-orphan")
     def get_available_spots(self):

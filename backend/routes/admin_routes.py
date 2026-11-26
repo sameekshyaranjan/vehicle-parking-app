@@ -99,17 +99,19 @@ def admin_dashboard():
         .first()
         most_popular_lot = popular_lot_query[0] if popular_lot_query else "N/A"
         recent_reservations = Reservation.query\
-            .order_by(Reservation.parking_timestamp.desc())\
+            .order_by(Reservation.parking_timestamp.desc().nulls_last())\
             .limit(5).all()
         recent_activity = []
         for reservation in recent_reservations:
+            spot = reservation.spot
+            lot = spot.parking_lot if spot else None
             recent_activity.append({
                 'id': reservation.id,
-                'user_name': reservation.user.fullname,
-                'lot_name': reservation.spot.parking_lot.prime_location_name,
-                'spot_number': reservation.spot.spot_number,
+                'user_name': reservation.user.fullname if reservation.user else 'Unknown user',
+                'lot_name': lot.prime_location_name if lot else 'Removed parking spot',
+                'spot_number': spot.spot_number if spot else None,
                 'vehicle_number': reservation.vehicle_number,
-                'timestamp': reservation.parking_timestamp.isoformat(),
+                'timestamp': reservation.parking_timestamp.isoformat() if reservation.parking_timestamp else None,
                 'status': 'Active' if not reservation.leaving_timestamp else 'Completed'
             })
         system_status = {
@@ -286,7 +288,7 @@ def create_parking_lot():
 def update_parking_lot(lot_id):
  
     try:
-        lot = ParkingLot.query.get_or_404(lot_id)
+        lot = ParkingLot.query.filter_by(id=lot_id).with_for_update().first_or_404()
         data = request.get_json()
         
         # Update basic information
@@ -357,7 +359,7 @@ def update_parking_lot(lot_id):
 def delete_parking_lot(lot_id): 
     
     try:
-        lot = ParkingLot.query.get_or_404(lot_id) 
+        lot = ParkingLot.query.filter_by(id=lot_id).with_for_update().first_or_404()
         
         # Check if any spots are occupied
         occupied_spots = ParkingSpot.query.filter_by(lot_id=lot_id, status='O').count()  
@@ -772,7 +774,8 @@ def get_performance_metrics():
         hourly_usage = db.session.query(
             func.extract('hour', Reservation.parking_timestamp).label('hour'),
             func.count(Reservation.id).label('bookings')
-        ).group_by(func.extract('hour', Reservation.parking_timestamp)).all()
+        ).filter(Reservation.parking_timestamp.isnot(None))\
+         .group_by(func.extract('hour', Reservation.parking_timestamp)).all()
 
         peak_hours = []
         for hour, bookings in hourly_usage:
