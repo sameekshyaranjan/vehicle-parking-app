@@ -1,6 +1,6 @@
 import os
 import dotenv
-from click import ClickException
+from click import ClickException, echo
 from datetime import timedelta
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
@@ -156,6 +156,17 @@ def register_commands(app):
             ))
         db.session.commit()
         print('Demo user and demo admin accounts are ready.')
+    @app.cli.command('seed-demo-data')
+    def seed_demo_data_command():
+        from .demo_data import seed_demo_data
+
+        lots, completed, active = seed_demo_data()
+        if app.redis and (lots or completed or active):
+            try:
+                app.redis.delete('admin_dashboard_stats', 'available_parking_lots')
+            except redis.exceptions.RedisError:
+                app.logger.warning('Demo data saved. The dashboard cache could not be cleared.')
+        echo(f'Demo data added: {lots} lots, {completed} completed bookings, {active} active bookings.')
 if __name__ == '__main__':
     app = create_app()
     print("🚗 Flask app created successfully!")

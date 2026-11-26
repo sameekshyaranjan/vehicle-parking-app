@@ -174,6 +174,19 @@ or **Sign in as Demo Admin**. Each button signs in to a dedicated account in
 the configured database. Demo sign-in is available on the local development
 app at port 8080 when enabled.
 
+To populate the local MySQL demo accounts with sample parking activity, run:
+
+```powershell
+.\.venv\Scripts\python.exe -m flask --app run seed-demo-data
+```
+
+The command adds four fictional parking lots, six completed bookings, and an
+active booking for Demo User if there is none. It preserves existing bookings
+and skips demo records already present. In the user account, open **My Bookings**
+or **My Statistics**, or use the CSV export. In the admin account, open the
+dashboard and look under **Reservation Activity** for the MySQL-generated release
+events, or open **Manage Parking Lots** to see the four demo locations.
+
 Redis provides caching and backs the optional Celery worker. Account registration,
 parking reservations, and direct CSV download work without a Redis server.
 Automated email and scheduled reporting require further integration in this checkout.

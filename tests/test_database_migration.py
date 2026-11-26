@@ -16,6 +16,7 @@ from werkzeug.security import generate_password_hash
 from backend.app import create_app, db
 from backend.auth.demo import DEMO_PASSWORD
 from backend.database import sqlalchemy_database_url
+from backend.demo_data import ACTIVE_PLATE, HISTORY
 from backend.models import ParkingLot, ParkingSpot, Reservation, User
 from backend.models.reservation_audit import ReservationAudit
 from scripts.backup_sqlite import backup_sqlite
@@ -233,3 +234,43 @@ class DatabaseMigrationTest(unittest.TestCase):
         for path in ('dashboard', 'statistics', 'statistics/comprehensive', 'statistics/revenue-trends', 'statistics/performance-metrics'):
             self.request('GET', 'admin/' + path, token=admin)
         self.request('DELETE', f'admin/parking-lots/{lot}', token=admin)
+        with self.app.app_context():
+            is_mysql = db.engine.dialect.name == 'mysql'
+        if is_mysql:
+            self.exercise_demo_seed(demo_token, admin)
+
+    def exercise_demo_seed(self, user, admin):
+        existing = self.request('POST', 'user/book-parking', 201, token=user, body={
+            'lot_id': 200, 'vehicle_number': 'KA00ZZ9001',
+        })['data']['reservation_id']
+        runner = self.app.test_cli_runner()
+
+        def seed(expected):
+            result = runner.invoke(args=['seed-demo-data'])
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertIn(expected, result.output)
+
+        seed('4 lots, 6 completed bookings, 0 active bookings')
+        seed('0 lots, 0 completed bookings, 0 active bookings')
+        dashboard = self.request('GET', 'user/dashboard', token=user)['data']
+        self.assertEqual(dashboard['activeReservation']['id'], existing)
+        history = self.request('GET', 'user/my-bookings', token=user)['data']['bookings']
+        completed_plates = {plate for plate, *_ in HISTORY}
+        completed = [booking for booking in history if booking['vehicle_number'] in completed_plates]
+        self.assertEqual(len(completed), len(HISTORY))
+        self.assertTrue(all(booking['leaving_timestamp'] and booking['parking_cost'] > 0 for booking in completed))
+        self.assertEqual(len({booking['lot_name'] for booking in completed}), 4)
+        audits = self.request('GET', 'admin/reservation-audit', token=admin)['data']
+        completed_costs = {booking['id']: booking['parking_cost'] for booking in completed}
+        audited_costs = {entry['reservation_id']: entry['final_cost'] for entry in audits
+                         if entry['reservation_id'] in completed_costs}
+        self.assertEqual(completed_costs, audited_costs)
+        csv = self.request('POST', 'user/export-history', token=user)
+        self.assertTrue(all(plate.encode() in csv.data for plate in completed_plates))
+        self.request('GET', 'user/statistics/detailed', token=user)
+
+        self.request('POST', f'user/release-parking/{existing}', token=user, body={'rating': 5})
+        seed('0 lots, 0 completed bookings, 1 active bookings')
+        seed('0 lots, 0 completed bookings, 0 active bookings')
+        dashboard = self.request('GET', 'user/dashboard', token=user)['data']
+        self.assertEqual(dashboard['activeReservation']['vehicle_number'], ACTIVE_PLATE)

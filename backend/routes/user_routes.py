@@ -1,4 +1,3 @@
-import math
 from flask import Blueprint, request, jsonify, current_app, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, and_
@@ -320,15 +319,8 @@ def release_parking_spot(reservation_id):
         if not reservation:
             return error_response(f"No active reservation found with ID {reservation_id}", 404)
         leaving_time = datetime.utcnow() + timedelta(hours=5, minutes=30)
-        duration_seconds = (leaving_time - reservation.parking_timestamp).total_seconds()
-        hours_parked = math.ceil(duration_seconds / 3600)
-        if hours_parked < 1:
-            hours_parked = 1
-        final_cost = reservation.spot.parking_lot.price * hours_parked
-        reservation.leaving_timestamp = leaving_time
-        reservation.parking_cost = final_cost
-        reservation.remarks = f"User Rating: {rating}/5"
-        reservation.spot.status = 'A'
+        hours_parked = reservation.release(leaving_time, rating)
+        final_cost = reservation.parking_cost
         spot_number = reservation.spot.spot_number
         db.session.commit()
         current_app.logger.info("--- Release Parking Request Success ---")
