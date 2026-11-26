@@ -4,6 +4,7 @@ venv
 node_modules
 .npm-cache/
 .postgres-test/
+.mysql-test/
 *.sqlite
 *.sqlite3
 *.db

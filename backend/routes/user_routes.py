@@ -93,7 +93,7 @@ def user_dashboard():
                 'current_cost': current_cost
             }
         recent_bookings = Reservation.query.filter_by(user_id=user_id)\
-            .order_by(Reservation.parking_timestamp.desc().nulls_last())\
+            .order_by(Reservation.parking_timestamp.is_(None), Reservation.parking_timestamp.desc())\
             .limit(5).all()
         recent_bookings_data = []
         for booking in recent_bookings:
@@ -282,6 +282,8 @@ def book_parking_spot():
     except IntegrityError as e:
         db.session.rollback()
         constraint = getattr(getattr(e.orig, 'diag', None), 'constraint_name', None)
+        if e.orig.args and e.orig.args[0] == 1062:  # MySQL duplicate key
+            constraint = str(e.orig.args[-1]).rpartition(' for key ')[2].strip("'\"`").split('.')[-1]
         if constraint == 'reservation_one_active_per_user':
             return error_response("You already have an active parking reservation", 400)
         if constraint == 'reservation_one_active_per_spot':
@@ -350,7 +352,7 @@ def get_user_bookings():
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 10, type=int)
         bookings = Reservation.query.filter_by(user_id=user_id)\
-            .order_by(Reservation.parking_timestamp.desc().nulls_last())\
+            .order_by(Reservation.parking_timestamp.is_(None), Reservation.parking_timestamp.desc())\
             .paginate(page=page, per_page=per_page, error_out=False)
         bookings_data = []
         for booking in bookings.items:
@@ -397,7 +399,7 @@ def export_parking_history():
         user = User.query.get(user_id)
         if not user:
             return error_response("User not found", 404)
-        reservations = Reservation.query.filter_by(user_id=user_id).order_by(Reservation.parking_timestamp.desc().nulls_last()).all()
+        reservations = Reservation.query.filter_by(user_id=user_id).order_by(Reservation.parking_timestamp.is_(None), Reservation.parking_timestamp.desc()).all()
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow(['Slot ID', 'Spot ID', 'Vehicle Number', 'Parking In', 'Parking Out', 'Cost', 'Remarks'])

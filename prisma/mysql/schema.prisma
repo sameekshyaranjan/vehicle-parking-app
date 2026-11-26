@@ -1,0 +1,68 @@
+datasource db {
+  provider = "mysql"
+}
+
+model User {
+  id           Int           @id @default(autoincrement())
+  username     String?       @unique(map: "user_username_key") @db.VarChar(512)
+  password     String?       @db.Text
+  fullname     String?       @db.Text
+  email        String?       @unique(map: "user_email_key") @db.VarChar(512)
+  address      String?       @db.Text
+  pin_code     String?       @db.Text
+  is_admin     Boolean?
+  reservations Reservation[]
+
+  @@map("user")
+}
+
+model ParkingLot {
+  id                  Int           @id @default(autoincrement())
+  prime_location_name String?       @db.Text
+  price               Float?        @db.Double
+  address             String?       @db.Text
+  pin_code            String?       @db.Text
+  number_of_spots     Int?
+  spots               ParkingSpot[]
+
+  @@map("parking_lot")
+}
+
+model ParkingSpot {
+  id           Int           @id @default(autoincrement())
+  lot_id       Int?
+  status       String?       @db.Text
+  spot_number  Int?
+  lot          ParkingLot?   @relation(fields: [lot_id], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  reservations Reservation[]
+
+  @@index([lot_id], map: "parking_spot_lot_id_fkey")
+  @@map("parking_spot")
+}
+
+model Reservation {
+  id                Int          @id @default(autoincrement())
+  user_id           Int?
+  spot_id           Int?
+  vehicle_number    String?      @db.Text
+  parking_timestamp DateTime?    @db.DateTime(6)
+  leaving_timestamp DateTime?    @db.DateTime(6)
+  parking_cost      Float?       @db.Double
+  remarks           String?      @db.Text
+  user              User?        @relation(fields: [user_id], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  spot              ParkingSpot? @relation(fields: [spot_id], references: [id], onDelete: SetNull, onUpdate: Restrict)
+
+  @@index([user_id], map: "reservation_user_id_fkey")
+  @@index([spot_id], map: "reservation_spot_id_fkey")
+  @@map("reservation")
+}
+
+model ReservationAudit {
+  id             Int      @id @default(autoincrement())
+  reservation_id Int
+  event_type     String   @db.Text
+  recorded_at    DateTime @default(now()) @db.DateTime(6)
+  final_cost     Float?   @db.Double
+
+  @@map("reservation_audit")
+}

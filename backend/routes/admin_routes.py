@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity,verify_jwt_in_request
 from sqlalchemy import and_, func
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
 import redis
 from ..models.user import User
@@ -46,8 +46,8 @@ def admin_required(f):
 @jwt_required()
 @admin_required
 def get_reservation_audit():
-    if db.engine.dialect.name != 'postgresql':
-        return error_response('Reservation audit is available on PostgreSQL.', 404)
+    if db.engine.dialect.name not in {'postgresql', 'mysql'}:
+        return error_response('Reservation audit is available on PostgreSQL and MySQL.', 404)
     try:
         entries = db.session.scalars(db.select(ReservationAudit).order_by(ReservationAudit.id.desc()).limit(10))
         return success_response([
@@ -55,7 +55,8 @@ def get_reservation_audit():
                 'id': entry.id,
                 'reservation_id': entry.reservation_id,
                 'event_type': entry.event_type,
-                'recorded_at': entry.recorded_at.isoformat(),
+                'recorded_at': (entry.recorded_at if entry.recorded_at.tzinfo else
+                                entry.recorded_at.replace(tzinfo=timezone.utc)).isoformat(),
                 'final_cost': entry.final_cost,
             }
             for entry in entries
@@ -125,7 +126,7 @@ def admin_dashboard():
         .first()
         most_popular_lot = popular_lot_query[0] if popular_lot_query else "N/A"
         recent_reservations = Reservation.query\
-            .order_by(Reservation.parking_timestamp.desc().nulls_last())\
+            .order_by(Reservation.parking_timestamp.is_(None), Reservation.parking_timestamp.desc())\
             .limit(5).all()
         recent_activity = []
         for reservation in recent_reservations:

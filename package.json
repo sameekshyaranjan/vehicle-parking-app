@@ -4,7 +4,10 @@
   "scripts": {
     "db:deploy": "prisma migrate deploy",
     "db:status": "prisma migrate status",
-    "db:validate": "prisma validate"
+    "db:validate": "prisma validate",
+    "db:mysql:deploy": "prisma migrate deploy --config prisma.mysql.config.ts",
+    "db:mysql:status": "prisma migrate status --config prisma.mysql.config.ts",
+    "db:mysql:validate": "prisma validate --config prisma.mysql.config.ts"
   },
   "devDependencies": {
     "dotenv": "^17.0.0",

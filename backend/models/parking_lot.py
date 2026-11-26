@@ -1,9 +1,11 @@
+from sqlalchemy.dialects.mysql import DOUBLE
+
 from ..app import db
 class ParkingLot(db.Model):
     __tablename__ = 'parking_lot'
     id = db.Column(db.Integer, primary_key=True)
     prime_location_name = db.Column(db.Text)
-    price = db.Column(db.Float)
+    price = db.Column(db.Float().with_variant(DOUBLE(asdecimal=False), 'mysql'))
     address = db.Column(db.Text)
     pin_code = db.Column(db.Text)
     number_of_spots = db.Column(db.Integer)

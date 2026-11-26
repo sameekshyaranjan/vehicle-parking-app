@@ -8,11 +8,14 @@ import unittest
 from unittest.mock import patch
 
 from redis.exceptions import ConnectionError as RedisConnectionError
-from sqlalchemy import create_engine, inspect, select, update
+from sqlalchemy import create_engine, inspect, select, text, update
+from sqlalchemy.dialects.mysql import TINYINT
+from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash
 
 from backend.app import create_app, db
 from backend.auth.demo import DEMO_PASSWORD
+from backend.database import sqlalchemy_database_url
 from backend.models import ParkingLot, ParkingSpot, Reservation, User
 from backend.models.reservation_audit import ReservationAudit
 from scripts.backup_sqlite import backup_sqlite
@@ -20,16 +23,21 @@ from scripts.import_sqlite import TABLES, import_snapshot
 
 
 TEST_DATABASE_URL = os.environ.get('PARKSMART_TEST_DATABASE_URL')
-POSTGRESQL_TABLES = (*TABLES, ReservationAudit.__table__)
+TEST_APP_URL = os.environ.get('PARKSMART_TEST_APP_DATABASE_URL', TEST_DATABASE_URL)
+APPLICATION_TABLES = (*TABLES, ReservationAudit.__table__)
 
 
-@unittest.skipUnless(TEST_DATABASE_URL, 'Set PARKSMART_TEST_DATABASE_URL to an empty migrated PostgreSQL database')
-class PostgreSQLMigrationTest(unittest.TestCase):
+@unittest.skipUnless(TEST_DATABASE_URL, 'Set PARKSMART_TEST_DATABASE_URL to an empty migrated database')
+class DatabaseMigrationTest(unittest.TestCase):
     def setUp(self):
+        target = sqlalchemy_database_url(TEST_DATABASE_URL)
+        runtime = sqlalchemy_database_url(TEST_APP_URL)
+        self.assertIn(target.get_backend_name(), {'postgresql', 'mysql'})
+        self.assertEqual((target.host, target.port, target.database), (runtime.host, runtime.port, runtime.database))
         settings = {
-            'SQLALCHEMY_DATABASE_URI': TEST_DATABASE_URL,
+            'SQLALCHEMY_DATABASE_URI': TEST_APP_URL,
             'PARKSMART_DEMO_LOGIN': '1',
-            'JWT_SECRET_KEY': 'isolated-postgresql-integration-tests',
+            'JWT_SECRET_KEY': 'isolated-parksmart-database-integration-tests',
         }
         with patch.dict(os.environ, settings), patch('backend.app.redis.from_url', side_effect=RedisConnectionError()):
             self.app = create_app()
@@ -37,30 +45,46 @@ class PostgreSQLMigrationTest(unittest.TestCase):
         self.client = self.app.test_client()
         with self.app.app_context():
             self.addCleanup(db.engine.dispose)
-            self.assertEqual(db.engine.dialect.name, 'postgresql')
-            for table in POSTGRESQL_TABLES:
+            self.assertEqual(db.engine.dialect.name, target.get_backend_name())
+            for table in APPLICATION_TABLES:
                 self.assertIsNone(db.session.execute(select(table.c.id).limit(1)).first(), 'Use an empty test database')
 
     def check_schema(self):
         with self.app.app_context():
             inspector = inspect(db.engine)
-            for table in POSTGRESQL_TABLES:
+            dialect = db.engine.dialect
+            for table in APPLICATION_TABLES:
                 columns = {column['name']: column for column in inspector.get_columns(table.name)}
                 self.assertEqual(set(columns), set(table.c.keys()))
                 for column in table.c:
                     actual = columns[column.name]
-                    self.assertIsInstance(actual['type'], type(column.type))
+                    if dialect.name == 'mysql' and column is User.__table__.c.is_admin:
+                        self.assertIsInstance(actual['type'], TINYINT)
+                        self.assertEqual(actual['type'].display_width, 1)
+                    else:
+                        self.assertIsInstance(actual['type'], type(column.type.dialect_impl(dialect)))
                     self.assertEqual(actual['nullable'], column.nullable)
                 expected_keys = {(fk.parent.name, fk.column.table.name, fk.ondelete) for fk in table.foreign_keys}
                 actual_keys = {
-                    (fk['constrained_columns'][0], fk['referred_table'], fk['options'].get('ondelete'))
+                    (fk['constrained_columns'][0], fk['referred_table'],
+                     fk['options'].get('ondelete') if fk['options'].get('ondelete') != 'RESTRICT' else None)
                     for fk in inspector.get_foreign_keys(table.name)
                 }
                 self.assertEqual(actual_keys, expected_keys)
-            indexes = {index['name']: index for index in inspector.get_indexes('reservation')}
-            for index in Reservation.__table__.indexes:
-                self.assertTrue(indexes[index.name]['unique'])
-                self.assertIn('leaving_timestamp IS NULL', indexes[index.name]['dialect_options']['postgresql_where'])
+            if dialect.name == 'mysql':
+                indexes = dict(db.session.execute(text('''
+                    SELECT INDEX_NAME, EXPRESSION FROM information_schema.STATISTICS
+                    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'reservation' AND NON_UNIQUE = 0
+                ''')).all())
+                for field in ('spot', 'user'):
+                    expression = indexes[f'reservation_one_active_per_{field}'].lower().replace('`', '')
+                    self.assertIn('leaving_timestamp is null', expression)
+                    self.assertIn(f'{field}_id', expression)
+            else:
+                indexes = {index['name']: index for index in inspector.get_indexes('reservation')}
+                for index in Reservation.__table__.indexes:
+                    self.assertTrue(indexes[index.name]['unique'])
+                    self.assertIn('leaving_timestamp IS NULL', indexes[index.name]['dialect_options']['postgresql_where'])
 
     def test_migration_and_parking_workflow(self):
         self.check_schema()
@@ -93,7 +117,7 @@ class PostgreSQLMigrationTest(unittest.TestCase):
                         email=f'{username}@demo.invalid', address='A' * 300, pin_code='000001', is_admin=is_admin,
                     ))
                 connection.execute(ParkingLot.__table__.insert().values(
-                    id=200, prime_location_name='Imported lot', price=17.5, address='123 Test Street',
+                    id=200, prime_location_name='Imported lot', price=17.53, address='123 Test Street',
                     pin_code='123456', number_of_spots=2,
                 ))
                 connection.execute(ParkingSpot.__table__.insert(), [
@@ -104,7 +128,7 @@ class PostgreSQLMigrationTest(unittest.TestCase):
                     id=400, user_id=109, spot_id=301, vehicle_number='KA01AA0001',
                     parking_timestamp=datetime(2025, 8, 28, 12, 18, 5, 123456),
                     leaving_timestamp=datetime(2025, 8, 28, 13, 18, 5, 654321),
-                    parking_cost=17.5, remarks='Historical booking',
+                    parking_cost=17.53, remarks='Historical booking',
                 ))
         finally:
             engine.dispose()
@@ -168,6 +192,15 @@ class PostgreSQLMigrationTest(unittest.TestCase):
             (demo_token, lot, 'KA01BB0001'), (regular['tokens']['access_token'], lot, 'KA01BB0002'),
         )
         self.assertEqual(reservation, 401)
+        with self.app.app_context():
+            active = db.session.get(Reservation, reservation)
+            user_id, spot_id = active.user_id, active.spot_id
+            for duplicate_user, duplicate_spot in ((109, spot_id), (user_id, 300)):
+                with self.assertRaises(IntegrityError):
+                    db.session.execute(Reservation.__table__.insert().values(
+                        user_id=duplicate_user, spot_id=duplicate_spot, vehicle_number='DUPLICATE',
+                    ))
+                db.session.rollback()
         self.request('POST', f'user/extend-booking/{reservation}', token=token, body={'additional_hours': 1})
         self.assertEqual(self.request('GET', 'admin/reservation-audit', token=admin)['data'], [])
         release = self.request('POST', f'user/release-parking/{reservation}', token=token, body={'rating': 5})['data']
@@ -180,6 +213,7 @@ class PostgreSQLMigrationTest(unittest.TestCase):
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0]['reservation_id'], reservation)
         self.assertEqual(entries[0]['event_type'], 'RELEASED')
+        self.assertIsInstance(entries[0]['final_cost'], (float, int))
         self.assertEqual(entries[0]['final_cost'], release['final_cost'])
         self.assertIsNotNone(datetime.fromisoformat(entries[0]['recorded_at']).tzinfo)
         token, reservation = self.race_bookings(

@@ -108,7 +108,7 @@ vehicle_parking_app/
 
 - Python and pip. This setup was verified with Python 3.14.
 - Node.js and npm. Node.js 22 is within the engine range declared by the Vue CLI dependency tree.
-- SQLite is included with Python. PostgreSQL is supported when configured. Redis and a Celery worker are optional for the core web app.
+- SQLite is included with Python. MySQL and PostgreSQL are supported when configured. Redis and a Celery worker are optional for the core web app.
 
 ## Installation
 
@@ -176,6 +176,55 @@ app at port 8080 when enabled.
 Redis provides caching and backs the optional Celery worker. Account registration,
 parking reservations, and direct CSV download work without a Redis server.
 Automated email and scheduled reporting require further integration in this checkout.
+
+## MySQL migration on Windows
+
+Install MySQL Community Server 8.4 LTS with the [official Windows MSI](https://dev.mysql.com/downloads/mysql/8.4.html?os=3). Configure a local-only Windows service on `127.0.0.1:3306`, with UTF-8 data using `utf8mb4` and `utf8mb4_0900_bin`. The local rehearsal service provisioned for this workspace is named `ParkSmartMySQL`. Check it with `Get-Service ParkSmartMySQL`; an administrator can run `Start-Service ParkSmartMySQL` if it is stopped.
+
+Use a dedicated MySQL database. Use a migration account with schema and trigger permissions and a separate application account with data access. On the local rehearsal service, binary logging is disabled so the migration account can install the trigger. The runtime account uses the trigger through the definer that installed it.
+
+From the project root in PowerShell, install dependencies and load the rehearsal credentials into **this terminal only**. The workspace setup saved them encrypted for your Windows user. On another computer, set `DATABASE_URL` to the migration account's `mysql://` URL instead. URL-encode passwords that contain special characters.
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+npm.cmd ci
+$vault = Join-Path $env:LOCALAPPDATA 'ParkSmartMySQL\connections.dpapi'
+$secureConnections = (Get-Content -LiteralPath $vault -Raw).Trim() | ConvertTo-SecureString
+$connections = [System.Net.NetworkCredential]::new('', $secureConnections).Password | ConvertFrom-Json
+$env:DATABASE_URL = $connections.rehearsalMigration
+npm.cmd run db:mysql:validate
+npm.cmd run db:mysql:deploy
+npm.cmd run db:mysql:status
+```
+
+The MySQL schema and migrations live in `prisma/mysql`. PostgreSQL has a separate schema and migration history. The MySQL release trigger and the two functional unique indexes are part of the versioned SQL migration. These indexes enforce one active reservation per user and per spot. An active reservation has no leaving timestamp.
+
+### Import and rehearse
+
+Use the source path configured by the running SQLite app. The default is shown below. Keep the target app disconnected while importing. The importer verifies every original row, including timestamps and hashes, and checks that MySQL's auto-increment counters are past the imported IDs. It protects the import from concurrent import commands and refuses to overwrite different data.
+
+```powershell
+$snapshot = 'backend/instance/backups/parksmart-mysql-rehearsal.sqlite3'
+.\.venv\Scripts\python.exe -m scripts.backup_sqlite backend/instance/parking.db $snapshot
+.\.venv\Scripts\python.exe -m scripts.import_sqlite --source $snapshot
+.\.venv\Scripts\python.exe -m scripts.import_sqlite --source $snapshot --verify-only
+```
+
+For the integration suite, migrate a **separate empty database** and pass the migration and runtime credentials separately. The test writes its own fixture data and exercises both the database guards and the application's workflows.
+
+```powershell
+$env:DATABASE_URL = $connections.integrationMigration
+npm.cmd run db:mysql:deploy
+$env:PARKSMART_TEST_DATABASE_URL = $env:DATABASE_URL
+$env:PARKSMART_TEST_APP_DATABASE_URL = $connections.integrationApp
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+### Cut over or roll back
+
+After approval, stop Flask and its workers, take a fresh SQLite backup, apply the MySQL migrations to the designated database, and import and verify the backup. Configure Flask and the worker with the **runtime** URL in `SQLALCHEMY_DATABASE_URI`. Keep JWT and Flask secrets. Clear or isolate cached parking data before restarting. To demo the trigger, sign in as a user, book and release a spot, then open **Reservation Activity** on the admin dashboard.
+
+To roll back before MySQL receives writes, stop Flask and its workers, restore the previous SQLite connection settings, clear the parking cache, and restart. If MySQL has accepted writes, stop writes and dump the database with `mysqldump --single-transaction --triggers` before reconciling those records with SQLite. Keep the original SQLite database and its backups.
 
 ## PostgreSQL migration on Windows
 
@@ -272,7 +321,7 @@ SQLite database and its backup should be retained until cutover is accepted.
 
 ## 📊 Database Models
 
-On PostgreSQL the app has five tables. In addition to users, parking lots,
+On MySQL and PostgreSQL the app has five tables. In addition to users, parking lots,
 parking spots, and reservations, `reservation_audit` stores release events.
 Its reservation ID is a snapshot that is retained if an admin later deletes
 the original reservation. The `reservation_release_audit` database trigger

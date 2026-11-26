@@ -20,6 +20,9 @@ def create_app(config_name='development'):
     app = Flask(__name__, instance_path=instance_path)
     database_url = os.environ.get('SQLALCHEMY_DATABASE_URI') or os.environ.get('DATABASE_URL')
     app.config['SQLALCHEMY_DATABASE_URI'] = sqlalchemy_database_url(database_url or 'sqlite:///parking.db')
+    if app.config['SQLALCHEMY_DATABASE_URI'].get_backend_name() == 'mysql':
+        # Read availability after acquiring the booking locks, including when JWT lookup ran earlier.
+        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'isolation_level': 'READ COMMITTED', 'pool_pre_ping': True}
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key')
     app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'jwt-secret-string-change-in-production')
@@ -102,8 +105,10 @@ def register_commands(app):
     @app.cli.command("init-db")
     def init_db_command():
         with app.app_context():
-            if db.engine.dialect.name != 'sqlite':
-                raise ClickException('Apply the PostgreSQL schema with npm run db:deploy.')
+            dialect = db.engine.dialect.name
+            if dialect != 'sqlite':
+                command = 'db:mysql:deploy' if dialect == 'mysql' else 'db:deploy'
+                raise ClickException(f'Apply the database schema with npm run {command}.')
             db.create_all()
         print("✅ Database tables created successfully!")
     @app.cli.command("create-admin")
