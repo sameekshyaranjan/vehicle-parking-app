@@ -8,17 +8,19 @@ import unittest
 from unittest.mock import patch
 
 from redis.exceptions import ConnectionError as RedisConnectionError
-from sqlalchemy import create_engine, inspect, select
+from sqlalchemy import create_engine, inspect, select, update
 from werkzeug.security import generate_password_hash
 
 from backend.app import create_app, db
 from backend.auth.demo import DEMO_PASSWORD
 from backend.models import ParkingLot, ParkingSpot, Reservation, User
+from backend.models.reservation_audit import ReservationAudit
 from scripts.backup_sqlite import backup_sqlite
 from scripts.import_sqlite import TABLES, import_snapshot
 
 
 TEST_DATABASE_URL = os.environ.get('PARKSMART_TEST_DATABASE_URL')
+POSTGRESQL_TABLES = (*TABLES, ReservationAudit.__table__)
 
 
 @unittest.skipUnless(TEST_DATABASE_URL, 'Set PARKSMART_TEST_DATABASE_URL to an empty migrated PostgreSQL database')
@@ -36,13 +38,13 @@ class PostgreSQLMigrationTest(unittest.TestCase):
         with self.app.app_context():
             self.addCleanup(db.engine.dispose)
             self.assertEqual(db.engine.dialect.name, 'postgresql')
-            for table in TABLES:
+            for table in POSTGRESQL_TABLES:
                 self.assertIsNone(db.session.execute(select(table.c.id).limit(1)).first(), 'Use an empty test database')
 
     def check_schema(self):
         with self.app.app_context():
             inspector = inspect(db.engine)
-            for table in TABLES:
+            for table in POSTGRESQL_TABLES:
                 columns = {column['name']: column for column in inspector.get_columns(table.name)}
                 self.assertEqual(set(columns), set(table.c.keys()))
                 for column in table.c:
@@ -144,6 +146,8 @@ class PostgreSQLMigrationTest(unittest.TestCase):
         self.assertEqual(demo_admin['user']['id'], 102)
         demo_token = demo_user['tokens']['access_token']
         self.request('GET', 'admin/dashboard', 403, token=demo_token)
+        self.request('GET', 'admin/reservation-audit', 403, token=demo_token)
+        self.assertEqual(self.request('GET', 'admin/reservation-audit', token=admin)['data'], [])
         self.request('GET', 'admin/dashboard', token=demo_admin['tokens']['access_token'])
         self.request('GET', 'user/dashboard', token=demo_token)
         self.request('POST', 'auth/refresh', token=demo_user['tokens']['refresh_token'])
@@ -165,7 +169,19 @@ class PostgreSQLMigrationTest(unittest.TestCase):
         )
         self.assertEqual(reservation, 401)
         self.request('POST', f'user/extend-booking/{reservation}', token=token, body={'additional_hours': 1})
-        self.request('POST', f'user/release-parking/{reservation}', token=token, body={'rating': 5})
+        self.assertEqual(self.request('GET', 'admin/reservation-audit', token=admin)['data'], [])
+        release = self.request('POST', f'user/release-parking/{reservation}', token=token, body={'rating': 5})['data']
+        with self.app.app_context():
+            db.session.execute(update(Reservation).where(Reservation.id == reservation).values(
+                leaving_timestamp=Reservation.leaving_timestamp,
+            ))
+            db.session.commit()
+        entries = self.request('GET', 'admin/reservation-audit', token=admin)['data']
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]['reservation_id'], reservation)
+        self.assertEqual(entries[0]['event_type'], 'RELEASED')
+        self.assertEqual(entries[0]['final_cost'], release['final_cost'])
+        self.assertIsNotNone(datetime.fromisoformat(entries[0]['recorded_at']).tzinfo)
         token, reservation = self.race_bookings(
             (demo_token, 200, 'KA01CC0001'), (demo_token, lot, 'KA01CC0002'),
         )

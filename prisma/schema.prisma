@@ -61,3 +61,13 @@ model Reservation {
   @@unique([user_id], map: "reservation_one_active_per_user", where: raw("(leaving_timestamp IS NULL)"))
   @@map("reservation")
 }
+
+model ReservationAudit {
+  id             Int      @id @default(autoincrement())
+  reservation_id Int
+  event_type     String
+  recorded_at    DateTime @default(now()) @db.Timestamptz(6)
+  final_cost     Float?   @db.DoublePrecision
+
+  @@map("reservation_audit")
+}

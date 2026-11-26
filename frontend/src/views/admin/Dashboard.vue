@@ -188,6 +188,35 @@
           </div>
         </div>
       </div>
+      <section v-if="reservationAudit || auditError" class="card mt-4" aria-labelledby="reservation-audit-title">
+        <div class="card-header">
+          <h5 id="reservation-audit-title" class="card-title mb-0">Reservation Activity</h5>
+        </div>
+        <div class="card-body">
+          <p v-if="auditError" class="text-muted mb-0" role="status">Unable to load reservation activity.</p>
+          <p v-else-if="!reservationAudit.length" class="text-muted mb-0">No recorded releases yet.</p>
+          <div v-else class="table-responsive">
+            <table class="table align-middle mb-0">
+              <thead>
+                <tr>
+                  <th scope="col">Reservation</th>
+                  <th scope="col">Event</th>
+                  <th scope="col">Recorded at</th>
+                  <th scope="col" class="text-end">Final cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="entry in reservationAudit" :key="entry.id">
+                  <td>#{{ entry.reservation_id }}</td>
+                  <td>{{ entry.event_type }}</td>
+                  <td>{{ formatAuditTime(entry.recorded_at) }}</td>
+                  <td class="text-end">{{ entry.final_cost === null ? '—' : adminStore.formatCurrency(entry.final_cost) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 </template>
@@ -208,6 +237,8 @@ export default {
     const dashboard = computed(() => adminStore.dashboard)
     const isLoading = computed(() => adminStore.isLoading)
     const error = computed(() => adminStore.error)
+    const reservationAudit = ref(null)
+    const auditError = ref(false)
     const todayRevenue = computed(() =>
       adminStore.formatCurrency(dashboard.value.todayRevenue || 0)
     )
@@ -235,10 +266,27 @@ export default {
     const alerts = computed(() =>
       dashboard.value.alerts || []
     )
+    const fetchReservationAudit = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/admin/reservation-audit', {
+          headers: { Authorization: `Bearer ${authStore.accessToken}` }
+        })
+        if (response.status === 404) {
+          reservationAudit.value = null
+        } else {
+          if (!response.ok) throw new Error('Unable to load reservation activity')
+          reservationAudit.value = (await response.json()).data
+        }
+        auditError.value = false
+      } catch {
+        auditError.value = true
+      }
+    }
+    const formatAuditTime = (timestamp) => new Date(timestamp).toLocaleString()
     const refreshDashboard = async () => {
       try {
         console.log('🔄 Refreshing dashboard data...')
-        await adminStore.fetchDashboard()
+        await Promise.all([adminStore.fetchDashboard(), fetchReservationAudit()])
         console.log('✅ Dashboard data loaded successfully')
       } catch (error) {
         console.error('❌ Error refreshing dashboard:', error)
@@ -323,6 +371,9 @@ export default {
       occupancyColor,
       systemStatus,
       recentActivity,
+      reservationAudit,
+      auditError,
+      formatAuditTime,
       alerts,
       refreshDashboard,
       formatTimeAgo,

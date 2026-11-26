@@ -211,7 +211,7 @@ npm.cmd run db:status
 .\.venv\Scripts\python.exe -m scripts.import_sqlite --source $snapshot --verify-only
 ```
 
-The import copies all four tables by ID in one transaction, checks every field
+The import copies the four SQLite application tables by ID in one transaction, checks every field
 against the snapshot, and advances the PostgreSQL sequences. It can be rerun on
 an identical destination and refuses to overwrite different data. Foreign-key
 violations and duplicate active reservations must be resolved before import.
@@ -271,6 +271,21 @@ SQLite database and its backup should be retained until cutover is accepted.
 - `GET /api/user/export-history` - Export parking history
 
 ## 📊 Database Models
+
+On PostgreSQL the app has five tables. In addition to users, parking lots,
+parking spots, and reservations, `reservation_audit` stores release events.
+Its reservation ID is a snapshot that is retained if an admin later deletes
+the original reservation. The `reservation_release_audit` database trigger
+records a `RELEASED` event when a reservation's leaving timestamp first changes
+from empty to set. Imported completed reservations do not create events.
+
+### Demonstrate the PostgreSQL trigger
+
+1. Apply the Prisma migrations with `npm.cmd run db:deploy` on the demo database.
+2. As admin, create a parking lot with an available spot.
+3. As a regular user, book a spot and release it.
+4. Sign in as admin and open **Reservation Activity** on the dashboard. The
+   new `RELEASED` row shows the reservation ID, recorded time, and final cost.
 
 ### User Model
 ```python

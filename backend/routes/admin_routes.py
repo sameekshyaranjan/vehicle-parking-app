@@ -8,6 +8,7 @@ from ..models.user import User
 from ..models.parking_lot import ParkingLot
 from ..models.parking_spot import ParkingSpot
 from ..models.reservation import Reservation
+from ..models.reservation_audit import ReservationAudit
 from ..app import db
 from . import admin_required, success_response, error_response
 admin_bp = Blueprint('admin', __name__)
@@ -39,6 +40,31 @@ def admin_required(f):
             print(f"❌ Admin check error: {e}")
             return jsonify({'error': 'Authentication error'}), 401
     return decorated_function
+
+
+@admin_bp.get('/reservation-audit')
+@jwt_required()
+@admin_required
+def get_reservation_audit():
+    if db.engine.dialect.name != 'postgresql':
+        return error_response('Reservation audit is available on PostgreSQL.', 404)
+    try:
+        entries = db.session.scalars(db.select(ReservationAudit).order_by(ReservationAudit.id.desc()).limit(10))
+        return success_response([
+            {
+                'id': entry.id,
+                'reservation_id': entry.reservation_id,
+                'event_type': entry.event_type,
+                'recorded_at': entry.recorded_at.isoformat(),
+                'final_cost': entry.final_cost,
+            }
+            for entry in entries
+        ])
+    except Exception:
+        current_app.logger.exception('Unable to read reservation audit')
+        return error_response('Unable to load reservation audit.', 500)
+
+
 @admin_bp.route('/dashboard', methods=['GET'])
 @jwt_required()
 @admin_required
