@@ -1,0 +1,152 @@
+import os
+import dotenv
+from click import ClickException
+from datetime import timedelta
+from flask import Flask, jsonify, request
+from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS
+from flask_jwt_extended import JWTManager
+import redis
+from .celery_app import celery_app
+from .tasks.celery_config import configure_celery
+dotenv.load_dotenv()
+db = SQLAlchemy()
+jwt = JWTManager()
+def register_commands(app):
+    pass
+def create_app(config_name='development'):
+    instance_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'instance')
+    app = Flask(__name__, instance_path=instance_path)
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("SQLALCHEMY_DATABASE_URI", 'sqlite:///parking.db')
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key')
+    app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'jwt-secret-string-change-in-production')
+    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=24)
+    app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
+    app.config['DEMO_LOGIN_ENABLED'] = os.environ.get('PARKSMART_DEMO_LOGIN') == '1'
+    app.config['MAX_PARKING_SPOTS_PER_LOT'] = 1000
+    app.extensions['celery'] = celery_app
+    app.config['REDIS_URL'] = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
+    app.config['CELERY_BROKER_URL'] = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+    app.config['CELERY_RESULT_BACKEND'] = os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/1')
+    try:
+        app.redis = redis.from_url(app.config['REDIS_URL'])
+        if app.redis.ping():
+            print("✅ Successfully connected to Redis!")
+    except redis.exceptions.ConnectionError as e:
+        print(f"❌ Could not connect to Redis: {e}")
+        app.redis = None
+    except Exception as e:
+        print(f"An error occurred during Redis initialization: {e}")
+        app.redis = None
+    initialize_extensions(app)
+    CORS(app)
+    register_blueprints(app)
+    register_commands(app)
+    configure_celery(app, celery_app)
+    return app
+def initialize_extensions(app):
+    db.init_app(app)
+    jwt.init_app(app)
+    with app.app_context():
+        from .models.user import User
+        @jwt.user_identity_loader
+        def user_identity_lookup(user):
+            if hasattr(user, 'id'):
+                return str(user.id)
+            return str(user)
+        @jwt.user_lookup_loader
+        def user_lookup_callback(_jwt_header, jwt_data):
+            identity = jwt_data["sub"]
+            try:
+                return User.query.filter_by(id=int(identity)).one_or_none()
+            except (ValueError, TypeError):
+                return None
+        @jwt.expired_token_loader
+        def expired_token_callback(jwt_header, jwt_payload):
+            return jsonify({
+                'error': True,
+                'message': 'Token has expired'
+            }), 401
+        @jwt.invalid_token_loader
+        def invalid_token_callback(error):
+            return jsonify({
+                'error': True,
+                'message': 'Invalid token'
+            }), 401
+        @jwt.unauthorized_loader
+        def missing_token_callback(error):
+            return jsonify({
+                'error': True,
+                'message': 'Authorization token is required'
+            }), 401
+    print("✅ Flask extensions initialized")
+def register_blueprints(app):
+    try:
+        from .auth.routes import auth_bp
+        from .routes.admin_routes import admin_bp
+        from .routes.user_routes import user_bp
+        app.register_blueprint(auth_bp, url_prefix='/api/auth')
+        app.register_blueprint(admin_bp, url_prefix='/api/admin')
+        app.register_blueprint(user_bp, url_prefix='/api/user')
+        print("✅ Blueprints registered successfully:")
+        print("   - Auth routes: /api/auth/*")
+        print("   - Admin routes: /api/admin/*")
+        print("   - User routes: /api/user/*")
+    except ImportError as e:
+        print(f"❌ Blueprint import error: {e}")
+        raise
+def register_commands(app):
+    @app.cli.command("init-db")
+    def init_db_command():
+        with app.app_context():
+            db.create_all()
+        print("✅ Database tables created successfully!")
+    @app.cli.command("create-admin")
+    def create_admin_command():
+        from .models.user import User
+        from werkzeug.security import generate_password_hash
+        with app.app_context():
+            if User.query.filter_by(is_admin=True).first():
+                print("🔶 Admin user already exists.")
+                return
+            admin_user = User(
+                username='admin',
+                password=generate_password_hash('admin123'),
+                fullname='System Administrator',
+                email='admin@parkingapp.com',
+                address='System Address',
+                pin_code='000000',
+                is_admin=True
+            )
+            db.session.add(admin_user)
+            db.session.commit()
+            print("✅ Default admin user created successfully!")
+            print("   - Username: admin")
+            print("   - Password: admin123")
+    @app.cli.command('create-demo-accounts')
+    def create_demo_accounts_command():
+        from .auth.demo import DEMO_ACCOUNTS, DEMO_PASSWORD, find_demo_account
+        from .models.user import User
+
+        for role, (username, fullname, is_admin) in DEMO_ACCOUNTS.items():
+            if find_demo_account(role):
+                continue
+            email = f'{username}@demo.invalid'
+            if User.query.filter((User.username == username) | (User.email == email)).first():
+                raise ClickException(f'An existing account conflicts with {username}.')
+            db.session.add(User(
+                username=username,
+                password=DEMO_PASSWORD,
+                fullname=fullname,
+                email=email,
+                address='Demo Address',
+                pin_code='000000',
+                is_admin=is_admin,
+            ))
+        db.session.commit()
+        print('Demo user and demo admin accounts are ready.')
+if __name__ == '__main__':
+    app = create_app()
+    print("🚗 Flask app created successfully!")
+    print("💡 Use 'python run.py' to start the application")

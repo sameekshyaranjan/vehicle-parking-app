@@ -1,0 +1,9 @@
+venv
+.venv/
+.env
+node_modules
+frontend/.npm-cache/
+backend/instance/
+__pycache__/
+*.py[cod]
+*_Zone.Identifier

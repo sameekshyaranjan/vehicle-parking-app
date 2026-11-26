@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Parking Reminder</title>
+    <style>
+        :root {
+            --primary-color: #000133;
+            --secondary-color: #4B006E;
+            --text-accent: #8AB8FE;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+        }
+        
+        .email-container {
+            background: white;
+            padding: 0;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,1,51,0.15);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            color: var(--text-accent);
+        }
+        
+        .header .icon {
+            font-size: 50px;
+            margin-bottom: 15px;
+            display: block;
+        }
+        
+        .header .subtitle {
+            color: var(--text-accent);
+            opacity: 0.9;
+            margin-top: 10px;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .greeting {
+            font-size: 20px;
+            margin-bottom: 25px;
+            color: var(--primary-color);
+            font-weight: 600;
+        }
+        
+        .message {
+            background: linear-gradient(135deg, rgba(138,184,254,0.1), rgba(75,0,110,0.05));
+            padding: 25px;
+            border-radius: 10px;
+            border-left: 5px solid var(--secondary-color);
+            margin: 25px 0;
+        }
+        
+        .message h3 {
+            color: var(--secondary-color);
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+        
+        .cta-button {
+            display: inline-block;
+            padding: 15px 30px;
+            background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: bold;
+            margin: 20px 0;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(75,0,110,0.3);
+        }
+        
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(75,0,110,0.4);
+            color: white;
+            text-decoration: none;
+        }
+        
+        .stats {
+            background: linear-gradient(135deg, #f8f9fa, rgba(138,184,254,0.1));
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border: 2px solid rgba(138,184,254,0.2);
+        }
+        
+        .stats-grid {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        
+        .stats-item {
+            text-align: center;
+            flex: 1;
+            min-width: 80px;
+        }
+        
+        .stats-number {
+            font-size: 28px;
+            font-weight: bold;
+            color: var(--secondary-color);
+            display: block;
+        }
+        
+        .stats-label {
+            font-size: 12px;
+            color: var(--primary-color);
+            margin-top: 5px;
+            font-weight: 500;
+        }
+        
+        .lots-list {
+            margin: 20px 0;
+        }
+        
+        .lot-item {
+            background: white;
+            border: 1px solid rgba(138,184,254,0.3);
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+            box-shadow: 0 2px 8px rgba(0,1,51,0.05);
+        }
+        
+        .lot-name {
+            font-weight: bold;
+            color: var(--primary-color);
+            font-size: 16px;
+        }
+        
+        .lot-details {
+            color: #666;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        
+        .lot-price {
+            color: var(--secondary-color);
+            font-weight: bold;
+            float: right;
+        }
+        
+        .pro-tip {
+            background: linear-gradient(135deg, rgba(138,184,254,0.1), rgba(255,255,255,0.8));
+            border: 1px solid var(--text-accent);
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        
+        .pro-tip-icon {
+            color: var(--secondary-color);
+            font-size: 18px;
+            margin-right: 8px;
+        }
+        
+        .footer {
+            background: #f8f9fa;
+            padding: 25px 30px;
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            border-top: 1px solid #eee;
+        }
+        
+        .footer-brand {
+            color: var(--primary-color);
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        @media (max-width: 600px) {
+            .stats-grid {
+                flex-direction: column;
+            }
+            
+            .lot-price {
+                float: none;
+                display: block;
+                margin-top: 5px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="header">
+            <span class="icon">🚗</span>
+            <h1>Vehicle Parking System</h1>
+            <p class="subtitle">Daily Parking Reminder</p>
+        </div>
+        
+        <div class="content">
+            <div class="greeting">
+                Hello {{ user_name }}! 👋
+            </div>
+            
+            <div class="message">
+                <h3>🎯 Don't Miss Your Perfect Parking Spot!</h3>
+                <p>We noticed you haven't reserved a parking space today. Secure your spot before they're all taken!</p>
+            </div>
+            
+            <p>Here's what's available in your area:</p>
+            
+            <div class="stats">
+                <div class="stats-grid">
+                    <div class="stats-item">
+                        <span class="stats-number">{{ available_lots }}</span>
+                        <div class="stats-label">Available Lots</div>
+                    </div>
+                    <div class="stats-item">
+                        <span class="stats-number">{{ available_spots }}</span>
+                        <div class="stats-label">Open Spots</div>
+                    </div>
+                    <div class="stats-item">
+                        <span class="stats-number">₹{{ min_price }}</span>
+                        <div class="stats-label">Starting From</div>
+                    </div>
+                </div>
+            </div>
+            
+            <h4 style="color: var(--primary-color); margin-top: 30px;">🏆 Popular Locations:</h4>
+            <div class="lots-list">
+                {% for lot in popular_lots %}
+                <div class="lot-item">
+                    <div class="lot-name">{{ lot.name }}</div>
+                    <div class="lot-details">
+                        {{ lot.available_spots }} spots available
+                        <span class="lot-price">₹{{ lot.price }}/hour</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="{{ booking_url }}" class="cta-button">
+                    🚀 Book Your Spot Now
+                </a>
+            </div>
+            
+            <div class="pro-tip">
+                <span class="pro-tip-icon">💡</span>
+                <strong>Pro Tip:</strong> Book early to secure prime locations at the best rates! Early birds save up to 20%.
+            </div>
+        </div>
+        
+        <div class="footer">
+            <div class="footer-brand">Vehicle Parking App V2</div>
+            <p>This is an automated reminder to help you never miss a parking spot.</p>
+            <p>You can update your notification preferences in your account settings.</p>
+            <p>&copy; 2025 Vehicle Parking System. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

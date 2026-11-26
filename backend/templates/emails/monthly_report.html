@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monthly Parking Report</title>
+    <style>
+        :root {
+            --primary-color: #000133;
+            --secondary-color: #4B006E;
+            --text-accent: #8AB8FE;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 700px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+        }
+        
+        .email-container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 15px 35px rgba(0,1,51,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 40px 30px;
+            text-align: center;
+            position: relative;
+        }
+        
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="20" cy="20" r="1" fill="rgba(138,184,254,0.3)"/><circle cx="80" cy="40" r="1" fill="rgba(138,184,254,0.3)"/><circle cx="40" cy="80" r="1" fill="rgba(138,184,254,0.3)"/></svg>');
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 32px;
+            color: var(--text-accent);
+            position: relative;
+            z-index: 1;
+        }
+        
+        .month-badge {
+            background: rgba(138,184,254,0.2);
+            color: var(--text-accent);
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-size: 16px;
+            margin-top: 15px;
+            display: inline-block;
+            font-weight: 600;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .greeting {
+            font-size: 18px;
+            margin-bottom: 25px;
+            color: var(--primary-color);
+        }
+        
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 30px 0;
+        }
+        
+        .summary-card {
+            background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
+            color: white;
+            padding: 25px 20px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(75,0,110,0.3);
+            transition: transform 0.3s ease;
+        }
+        
+        .summary-card:hover {
+            transform: translateY(-3px);
+        }
+        
+        .summary-card.green {
+            background: linear-gradient(135deg, #28a745, #20c997);
+        }
+        
+        .summary-card.orange {
+            background: linear-gradient(135deg, #fd7e14, #f8b500);
+        }
+        
+        .summary-card.blue {
+            background: linear-gradient(135deg, var(--text-accent), var(--secondary-color));
+        }
+        
+        .card-number {
+            font-size: 36px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .card-label {
+            font-size: 14px;
+            opacity: 0.95;
+            font-weight: 500;
+        }
+        
+        .section {
+            margin: 35px 0;
+            padding: 25px;
+            background: linear-gradient(135deg, rgba(138,184,254,0.05), rgba(255,255,255,0.8));
+            border-radius: 12px;
+            border-left: 5px solid var(--secondary-color);
+            box-shadow: 0 3px 10px rgba(0,1,51,0.05);
+        }
+        
+        .section h3 {
+            color: var(--primary-color);
+            margin-top: 0;
+            margin-bottom: 20px;
+            font-size: 22px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .section-icon {
+            font-size: 24px;
+            margin-right: 10px;
+            color: var(--secondary-color);
+        }
+        
+        .favorite-lot {
+            background: white;
+            border: 2px solid rgba(138,184,254,0.3);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 15px 0;
+        }
+        
+        .lot-name {
+            font-size: 20px;
+            font-weight: bold;
+            color: var(--primary-color);
+            margin-bottom: 5px;
+        }
+        
+        .lot-address {
+            color: #666;
+            margin-bottom: 10px;
+        }
+        
+        .lot-stats {
+            color: var(--secondary-color);
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+        
+        .progress-bar {
+            background-color: rgba(138,184,254,0.2);
+            border-radius: 10px;
+            overflow: hidden;
+            height: 25px;
+            margin: 10px 0;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .progress-fill {
+            background: linear-gradient(135deg, var(--text-accent), var(--secondary-color));
+            height: 100%;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 12px;
+        }
+        
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 3px 10px rgba(0,1,51,0.1);
+        }
+        
+        .table th {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: var(--text-accent);
+            padding: 15px 12px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        
+        .table td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+            font-size: 14px;
+        }
+        
+        .table tr:nth-child(even) {
+            background-color: rgba(138,184,254,0.05);
+        }
+        
+        .table tr:hover {
+            background-color: rgba(75,0,110,0.1);
+        }
+        
+        .achievement {
+            background: linear-gradient(135deg, rgba(138,184,254,0.1), rgba(255,255,255,0.9));
+            border: 2px solid rgba(138,184,254,0.3);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 15px 0;
+            display: flex;
+            align-items: center;
+        }
+        
+        .achievement .icon {
+            font-size: 28px;
+            margin-right: 15px;
+            color: var(--secondary-color);
+        }
+        
+        .achievement-text {
+            flex: 1;
+        }
+        
+        .achievement-title {
+            font-weight: bold;
+            color: var(--primary-color);
+            margin-bottom: 5px;
+        }
+        
+        .tips-list {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 3px 10px rgba(0,1,51,0.05);
+        }
+        
+        .tips-list ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        
+        .tips-list li {
+            margin: 10px 0;
+            color: #555;
+        }
+        
+        .cta-buttons {
+            text-align: center;
+            margin: 35px 0;
+        }
+        
+        .cta-button {
+            display: inline-block;
+            padding: 15px 25px;
+            background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: bold;
+            margin: 10px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(75,0,110,0.3);
+        }
+        
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(75,0,110,0.4);
+            color: white;
+            text-decoration: none;
+        }
+        
+        .footer {
+            background: linear-gradient(135deg, #f8f9fa, rgba(138,184,254,0.1));
+            padding: 30px;
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            border-top: 3px solid var(--text-accent);
+        }
+        
+        .footer-brand {
+            color: var(--primary-color);
+            font-weight: bold;
+            font-size: 18px;
+            margin-bottom: 15px;
+        }
+        
+        @media (max-width: 600px) {
+            .summary-cards {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .table {
+                font-size: 12px;
+            }
+            
+            .cta-button {
+                display: block;
+                margin: 10px 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="header">
+            <h1>🚗 Monthly Parking Report</h1>
+            <div class="month-badge">{{ report_month }} {{ report_year }}</div>
+            <p style="margin: 15px 0 0 0; color: var(--text-accent); opacity: 0.9;">Your comprehensive parking activity summary</p>
+        </div>
+        
+        <div class="content">
+            <div class="greeting">
+                Hello <strong>{{ user_name }}</strong>! 🎉<br>
+                Here's your detailed parking activity for {{ report_month }} {{ report_year }}:
+            </div>
+            
+            <div class="summary-cards">
+                <div class="summary-card">
+                    <div class="card-number">{{ total_bookings }}</div>
+                    <div class="card-label">Total Bookings</div>
+                </div>
+                <div class="summary-card green">
+                    <div class="card-number">{{ total_hours }}</div>
+                    <div class="card-label">Hours Parked</div>
+                </div>
+                <div class="summary-card orange">
+                    <div class="card-number">₹{{ total_spent }}</div>
+                    <div class="card-label">Total Invested</div>
+                </div>
+                <div class="summary-card blue">
+                    <div class="card-number">₹{{ avg_cost }}</div>
+                    <div class="card-label">Avg Cost/Booking</div>
+                </div>
+            </div>
+            
+            {% if most_used_lot %}
+            <div class="section">
+                <h3>
+                    <span class="section-icon">🏆</span>
+                    Your Champion Parking Location
+                </h3>
+                <div class="favorite-lot">
+                    <div class="lot-name">{{ most_used_lot.name }}</div>
+                    <div class="lot-address">📍 {{ most_used_lot.address }}</div>
+                    <div class="lot-stats">Visited {{ most_used_lot.count }} times this month! 🎯</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: {{ most_used_lot.percentage }}%">
+                            {{ most_used_lot.percentage }}%
+                        </div>
+                    </div>
+                    <small style="color: var(--secondary-color); font-weight: 600;">
+                        {{ most_used_lot.percentage }}% of your total parking sessions
+                    </small>
+                </div>
+            </div>
+            {% endif %}
+            
+            {% if recent_bookings %}
+            <div class="section">
+                <h3>
+                    <span class="section-icon">📋</span>
+                    Recent Parking Sessions
+                </h3>
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Location</th>
+                            <th>Duration</th>
+                            <th>Investment</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for booking in recent_bookings %}
+                        <tr>
+                            <td>{{ booking.date }}</td>
+                            <td>{{ booking.location }}</td>
+                            <td>{{ booking.duration }} hrs</td>
+                            <td>₹{{ booking.cost }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+            
+            {% if achievements %}
+            <div class="section">
+                <h3>
+                    <span class="section-icon">🎖️</span>
+                    This Month's Achievements
+                </h3>
+                {% for achievement in achievements %}
+                <div class="achievement">
+                    <span class="icon">{{ achievement.icon }}</span>
+                    <div class="achievement-text">
+                        <div class="achievement-title">{{ achievement.title }}</div>
+                        <div>{{ achievement.description }}</div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            
+            <div class="section">
+                <h3>
+                    <span class="section-icon">💡</span>
+                    Smart Tips for Next Month
+                </h3>
+                <div class="tips-list">
+                    <ul>
+                        <li><strong>Early Bird Advantage:</strong> Book spots 24 hours in advance for up to 20% savings</li>
+                        <li><strong>Peak Hours:</strong> Avoid 9-11 AM and 5-7 PM for better rates and availability</li>
+                        <li><strong>Monthly Passes:</strong> Consider our new monthly subscriptions for {{ user_city }}</li>
+                        <li><strong>Smart Reminders:</strong> Enable notifications to never miss your perfect parking window</li>
+                        <li><strong>Eco-Friendly:</strong> Use our green parking spots for bonus rewards points</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="cta-buttons">
+                <a href="{{ dashboard_url }}" class="cta-button">
+                    📊 View Dashboard
+                </a>
+                <a href="{{ booking_url }}" class="cta-button">
+                    🚀 Book Next Spot
+                </a>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <div class="footer-brand">🚗 Vehicle Parking App V2</div>
+            <p><strong>Thank you for choosing our smart parking solution!</strong></p>
+            <p>This personalized report was generated on {{ generation_date }}</p>
+            <p>Need assistance? Reach out to us at <strong>support@parkingapp.com</strong></p>
+            <p>&copy; 2025 Vehicle Parking System. Empowering smart mobility.</p>
+        </div>
+    </div>
+</body>
+</html>

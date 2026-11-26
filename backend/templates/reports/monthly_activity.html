@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monthly Activity Report - {{ user_name }}</title>
+    <style>
+        :root {
+            --primary-color: #000133;
+            --secondary-color: #4B006E;
+            --text-accent: #8AB8FE;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #f8f9fa, rgba(138,184,254,0.1));
+        }
+        
+        .report-container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 15px 35px rgba(0,1,51,0.1);
+            overflow: hidden;
+        }
+        
+        .report-header {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 40px 30px;
+            text-align: center;
+            position: relative;
+        }
+        
+        .report-header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: 
+                radial-gradient(circle at 20% 20%, rgba(138,184,254,0.2) 2px, transparent 2px),
+                radial-gradient(circle at 80% 40%, rgba(138,184,254,0.2) 2px, transparent 2px),
+                radial-gradient(circle at 40% 80%, rgba(138,184,254,0.2) 2px, transparent 2px);
+            background-size: 100px 100px;
+        }
+        
+        .report-title {
+            color: var(--text-accent);
+            font-size: 36px;
+            margin-bottom: 15px;
+            position: relative;
+            z-index: 1;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .report-subtitle {
+            color: var(--text-accent);
+            font-size: 18px;
+            margin-bottom: 25px;
+            opacity: 0.9;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .report-meta {
+            background: rgba(138,184,254,0.2);
+            padding: 15px 25px;
+            border-radius: 25px;
+            display: inline-block;
+            position: relative;
+            z-index: 1;
+            font-weight: 600;
+        }
+        
+        .content-wrapper {
+            padding: 40px 30px;
+        }
+        
+        .user-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+        
+        .info-card {
+            background: linear-gradient(135deg, rgba(138,184,254,0.1), rgba(255,255,255,0.9));
+            padding: 25px;
+            border-radius: 15px;
+            border-left: 5px solid var(--secondary-color);
+            box-shadow: 0 5px 15px rgba(0,1,51,0.05);
+        }
+        
+        .info-card h3 {
+            color: var(--primary-color);
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .info-icon {
+            font-size: 24px;
+            margin-right: 10px;
+            color: var(--secondary-color);
+        }
+        
+        .info-card p {
+            margin: 8px 0;
+            color: #555;
+        }
+        
+        .info-card strong {
+            color: var(--primary-color);
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 40px 0;
+        }
+        
+        .metric-card {
+            background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
+            color: white;
+            padding: 30px 20px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 8px 25px rgba(75,0,110,0.3);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .metric-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, rgba(138,184,254,0.2) 0%, transparent 70%);
+            transform: scale(0);
+            transition: transform 0.3s ease;
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 35px rgba(75,0,110,0.4);
+        }
+        
+        .metric-card:hover::before {
+            transform: scale(1);
+        }
+        
+        .metric-card.success {
+            background: linear-gradient(135deg, #28a745, #20c997);
+        }
+        
+        .metric-card.warning {
+            background: linear-gradient(135deg, #fd7e14, #f8b500);
+        }
+        
+        .metric-card.info {
+            background: linear-gradient(135deg, var(--text-accent), var(--secondary-color));
+        }
+        
+        .metric-value {
+            font-size: 42px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+            position: relative;
+            z-index: 1;
+        }
+        
+        .metric-label {
+            font-size: 14px;
+            opacity: 0.95;
+            font-weight: 500;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .section {
+            margin: 50px 0;
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 5px 20px rgba(0,1,51,0.08);
+            border: 1px solid rgba(138,184,254,0.2);
+        }
+        
+        .section-title {
+            color: var(--primary-color);
+            font-size: 26px;
+            margin-bottom: 25px;
+            display: flex;
+            align-items: center;
+            border-bottom: 3px solid var(--text-accent);
+            padding-bottom: 15px;
+        }
+        
+        .section-icon {
+            font-size: 30px;
+            margin-right: 15px;
+            color: var(--secondary-color);
+        }
+        
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 25px 0;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0,1,51,0.1);
+        }
+        
+        .data-table th {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: var(--text-accent);
+            padding: 18px 15px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .data-table td {
+            padding: 15px;
+            border-bottom: 1px solid rgba(138,184,254,0.1);
+            font-size: 14px;
+            transition: background-color 0.3s ease;
+        }
+        
+        .data-table tr:nth-child(even) {
+            background-color: rgba(138,184,254,0.05);
+        }
+        
+        .data-table tr:hover {
+            background-color: rgba(75,0,110,0.1);
+            transform: scale(1.01);
+        }
+        
+        .rank-badge {
+            background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 12px;
+        }
+        
+        .chart-placeholder {
+            background: linear-gradient(135deg, rgba(138,184,254,0.1), rgba(255,255,255,0.9));
+            border: 2px dashed var(--text-accent);
+            border-radius: 15px;
+            padding: 50px 30px;
+            text-align: center;
+            color: var(--secondary-color);
+            margin: 25px 0;
+            transition: all 0.3s ease;
+        }
+        
+        .chart-placeholder:hover {
+            background: linear-gradient(135deg, rgba(138,184,254,0.15), rgba(255,255,255,0.95));
+            border-color: var(--secondary-color);
+        }
+        
+        .chart-title {
+            color: var(--primary-color);
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+        
+        .savings-indicator {
+            background: linear-gradient(135deg, #28a745, #20c997);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            margin: 25px 0;
+            box-shadow: 0 5px 20px rgba(40,167,69,0.3);
+        }
+        
+        .savings-indicator h4 {
+            margin: 0 0 10px 0;
+            font-size: 24px;
+        }
+        
+        .insight-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+        
+        .insight-card {
+            background: linear-gradient(135deg, rgba(138,184,254,0.1), rgba(255,255,255,0.9));
+            border: 1px solid rgba(138,184,254,0.3);
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.3s ease;
+        }
+        
+        .insight-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(75,0,110,0.15);
+            border-color: var(--secondary-color);
+        }
+        
+        .insight-label {
+            font-weight: 600;
+            color: var(--secondary-color);
+            margin-bottom: 5px;
+        }
+        
+        .insight-value {
+            font-size: 18px;
+            color: var(--primary-color);
+            font-weight: bold;
+        }
+        
+        .recommendations {
+            background: linear-gradient(135deg, rgba(138,184,254,0.1), rgba(255,255,255,0.9));
+            border-radius: 15px;
+            padding: 25px;
+            margin: 25px 0;
+        }
+        
+        .recommendation-item {
+            background: white;
+            border-left: 4px solid var(--secondary-color);
+            padding: 15px 20px;
+            margin: 15px 0;
+            border-radius: 8px;
+            box-shadow: 0 3px 10px rgba(0,1,51,0.05);
+        }
+        
+        .recommendation-icon {
+            color: var(--secondary-color);
+            font-size: 20px;
+            margin-right: 10px;
+        }
+        
+        .recommendation-title {
+            font-weight: bold;
+            color: var(--primary-color);
+            margin-bottom: 5px;
+        }
+        
+        .report-footer {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: var(--text-accent);
+            padding: 40px 30px;
+            text-align: center;
+            margin-top: 50px;
+        }
+        
+        .footer-logo {
+            font-size: 28px;
+            margin-bottom: 15px;
+        }
+        
+        .footer-brand {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+        
+        @media print {
+            body {
+                background: white;
+                font-size: 12px;
+            }
+            
+            .report-container {
+                box-shadow: none;
+                border-radius: 0;
+            }
+            
+            .metric-card, .section {
+                box-shadow: none;
+                break-inside: avoid;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .content-wrapper {
+                padding: 20px 15px;
+            }
+            
+            .user-info {
+                grid-template-columns: 1fr;
+            }
+            
+            .metrics-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .insight-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .data-table {
+                font-size: 12px;
+            }
+            
+            .data-table th,
+            .data-table td {
+                padding: 10px 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        <div class="report-header">
+            <h1 class="report-title">🚗 Monthly Activity Report</h1>
+            <p class="report-subtitle">Comprehensive Parking Intelligence & Analytics</p>
+            <div class="report-meta">
+                <strong>Period:</strong> {{ report_month }} {{ report_year }} | 
+                <strong>Generated:</strong> {{ generation_date }}
+            </div>
+        </div>
+        
+        <div class="content-wrapper">
+            <div class="user-info">
+                <div class="info-card">
+                    <h3><span class="info-icon">👤</span>User Profile</h3>
+                    <p><strong>Name:</strong> {{ user_name }}</p>
+                    <p><strong>Email:</strong> {{ user_email }}</p>
+                    <p><strong>Member Since:</strong> {{ member_since }}</p>
+                    <p><strong>Account Status:</strong> <span style="color: #28a745; font-weight: bold;">Active Premium</span></p>
+                </div>
+                <div class="info-card">
+                    <h3><span class="info-icon">📅</span>Report Summary</h3>
+                    <p><strong>Reporting Period:</strong> {{ report_month }} {{ report_year }}</p>
+                    <p><strong>Active Days:</strong> {{ active_days }} of {{ total_days }} days</p>
+                    <p><strong>Activity Rate:</strong> {{ (active_days / total_days * 100) | round }}%</p>
+                    <p><strong>Report Type:</strong> Detailed Analytics</p>
+                </div>
+            </div>
+            
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-value">{{ total_bookings }}</div>
+                    <div class="metric-label">Total Bookings</div>
+                </div>
+                <div class="metric-card success">
+                    <div class="metric-value">{{ total_hours }}</div>
+                    <div class="metric-label">Hours Parked</div>
+                </div>
+                <div class="metric-card warning">
+                    <div class="metric-value">₹{{ total_spent }}</div>
+                    <div class="metric-label">Total Investment</div>
+                </div>
+                <div class="metric-card info">
+                    <div class="metric-value">₹{{ avg_cost_per_hour }}</div>
+                    <div class="metric-label">Avg Cost/Hour</div>
+                </div>
+            </div>
+            
+            {% if savings_info %}
+            <div class="savings-indicator">
+                <h4>💰 Smart Savings: ₹{{ savings_info.amount }}</h4>
+                <p>{{ savings_info.description }}</p>
+            </div>
+            {% endif %}
+            
+            {% if most_used_lots %}
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="section-icon">🏆</span>
+                    Top Parking Destinations
+                </h2>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Location</th>
+                            <th>Usage Count</th>
+                            <th>Total Hours</th>
+                            <th>Investment</th>
+                            <th>Avg Duration</th>
+                            <th>Efficiency</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for lot in most_used_lots %}
+                        <tr>
+                            <td><span class="rank-badge">{{ loop.index }}</span></td>
+                            <td>
+                                <strong>{{ lot.name }}</strong><br>
+                                <small style="color: #666;">{{ lot.address }}</small>
+                            </td>
+                            <td>{{ lot.usage_count }}</td>
+                            <td>{{ lot.total_hours }}h</td>
+                            <td>₹{{ lot.total_spent }}</td>
+                            <td>{{ lot.avg_duration }}h</td>
+                            <td>
+                                <span style="color: {% if lot.efficiency >= 80 %}#28a745{% elif lot.efficiency >= 60 %}#fd7e14{% else %}#dc3545{% endif %}; font-weight: bold;">
+                                    {{ lot.efficiency }}%
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+            
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="section-icon">📊</span>
+                    Usage Analytics & Patterns
+                </h2>
+                <div class="chart-placeholder">
+                    <div class="chart-title">Weekly Usage Distribution</div>
+                    <p>Interactive chart showing your parking patterns by day of week</p>
+                    <small>Peak usage: {{ peak_usage_day }} | Least usage: {{ least_usage_day }}</small>
+                </div>
+                <div class="chart-placeholder">
+                    <div class="chart-title">Monthly Investment Trend</div>
+                    <p>Your parking investment trend over the last 6 months</p>
+                    <small>Growth rate: {{ monthly_growth }}% compared to previous month</small>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="section-icon">🎯</span>
+                    Key Performance Insights
+                </h2>
+                <div class="insight-grid">
+                    <div class="insight-card">
+                        <div class="insight-label">Peak Usage Day</div>
+                        <div class="insight-value">{{ peak_usage_day }}</div>
+                        <small>{{ peak_usage_count }} bookings</small>
+                    </div>
+                    <div class="insight-card">
+                        <div class="insight-label">Avg Session Duration</div>
+                        <div class="insight-value">{{ avg_session_duration }}h</div>
+                        <small>Optimal for your needs</small>
+                    </div>
+                    <div class="insight-card">
+                        <div class="insight-label">Most Economical Spot</div>
+                        <div class="insight-value">{{ most_economical_location }}</div>
+                        <small>Best value for money</small>
+                    </div>
+                    <div class="insight-card">
+                        <div class="insight-label">Preferred Time Slot</div>
+                        <div class="insight-value">{{ busiest_time_slot }}</div>
+                        <small>Your typical parking window</small>
+                    </div>
+                </div>
+            </div>
+            
+            {% if recommendations %}
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="section-icon">💡</span>
+                    Personalized Recommendations
+                </h2>
+                <div class="recommendations">
+                    {% for recommendation in recommendations %}
+                    <div class="recommendation-item">
+                        <span class="recommendation-icon">{{ recommendation.icon }}</span>
+                        <div class="recommendation-title">{{ recommendation.title }}</div>
+                        <div>{{ recommendation.description }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            
+            {% if recent_bookings %}
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="section-icon">📋</span>
+                    Recent Parking History
+                </h2>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Location</th>
+                            <th>Vehicle</th>
+                            <th>Check-In</th>
+                            <th>Duration</th>
+                            <th>Cost</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for booking in recent_bookings %}
+                        <tr>
+                            <td>{{ booking.date }}</td>
+                            <td>{{ booking.location }}</td>
+                            <td>{{ booking.vehicle_number }}</td>
+                            <td>{{ booking.check_in_time }}</td>
+                            <td>{{ booking.duration }}</td>
+                            <td>₹{{ booking.cost }}</td>
+                            <td>
+                                <span style="color: {% if booking.status == 'Completed' %}#28a745{% else %}#007bff{% endif %}; font-weight: bold;">
+                                    {{ booking.status }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+        </div>
+        
+        <div class="report-footer">
+            <div class="footer-logo">🚗</div>
+            <div class="footer-brand">Vehicle Parking App V2</div>
+            <p><strong>Driving Smart Mobility Solutions</strong></p>
+            <p>This comprehensive report was automatically generated on {{ generation_date }}</p>
+            <p>For support and inquiries: <strong>support@parkingapp.com</strong> | <strong>+91-800-PARKING</strong></p>
+            <p>&copy; 2025 Vehicle Parking System. Revolutionizing urban mobility.</p>
+        </div>
+    </div>
+</body>
+</html>
