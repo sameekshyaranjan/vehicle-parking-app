@@ -79,12 +79,16 @@
 #         print(f"❌ Error starting application: {e}")
 
 # run.py
+import os
+
 from backend.app import create_app
 
 # Create the Flask app instance using the factory function
 app = create_app()
 
 if __name__ == '__main__':
-    # The debug=True flag will provide helpful error messages during development.
-    # The host='0.0.0.0' makes the app accessible from other devices on your network.
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(
+        host=os.environ.get('FLASK_RUN_HOST', '0.0.0.0'),
+        port=int(os.environ.get('FLASK_RUN_PORT', '5000')),
+        debug=os.environ.get('FLASK_DEBUG', '1').lower() in {'1', 'true', 'yes'},
+    )

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useAuthStore } from './auth'
+import { API_BASE_URL } from '@/services/base-url'
 export const useAdminStore = defineStore('admin', () => {
   const authStore = useAuthStore()
   const dashboard = ref({
@@ -54,7 +55,7 @@ export const useAdminStore = defineStore('admin', () => {
     isLoading.value = true
     error.value = null
     try {
-      const response = await fetch(`http://localhost:5000/api/admin/dashboard`, {
+      const response = await fetch(`${API_BASE_URL}/admin/dashboard`, {
         headers: {
           'Authorization': `Bearer ${authStore.accessToken}`
         }
@@ -96,7 +97,7 @@ export const useAdminStore = defineStore('admin', () => {
   const fetchParkingLots = async () => {
     isLoading.value = true
     try {
-      const response = await fetch(`http://localhost:5000/api/admin/parking-lots`, {
+      const response = await fetch(`${API_BASE_URL}/admin/parking-lots`, {
         headers: {
           'Authorization': `Bearer ${authStore.accessToken}`
         }
@@ -116,7 +117,7 @@ export const useAdminStore = defineStore('admin', () => {
   const createParkingLot = async (lotData) => {
     isLoading.value = true
     try {
-      const response = await fetch(`http://localhost:5000/api/admin/parking-lots`, {
+      const response = await fetch(`${API_BASE_URL}/admin/parking-lots`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -140,7 +141,7 @@ export const useAdminStore = defineStore('admin', () => {
   const updateParkingLot = async (lotId, lotData) => {
     isLoading.value = true
     try {
-      const response = await fetch(`http://localhost:5000/api/admin/parking-lots/${lotId}`, {
+      const response = await fetch(`${API_BASE_URL}/admin/parking-lots/${lotId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -164,7 +165,7 @@ export const useAdminStore = defineStore('admin', () => {
   const deleteParkingLot = async (lotId) => {
     isLoading.value = true
     try {
-      const response = await fetch(`http://localhost:5000/api/admin/parking-lots/${lotId}`, {
+      const response = await fetch(`${API_BASE_URL}/admin/parking-lots/${lotId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${authStore.accessToken}`
@@ -186,7 +187,7 @@ export const useAdminStore = defineStore('admin', () => {
   const fetchParkingSpots = async (lotId) => {
     isLoading.value = true
     try {
-      const response = await fetch(`http://localhost:5000/api/admin/parking-spots/${lotId}`, {
+      const response = await fetch(`${API_BASE_URL}/admin/parking-spots/${lotId}`, {
         headers: {
           'Authorization': `Bearer ${authStore.accessToken}`
         }
@@ -207,7 +208,7 @@ export const useAdminStore = defineStore('admin', () => {
   const fetchUsers = async () => {
     isLoading.value = true
     try {
-      const response = await fetch(`http://localhost:5000/api/admin/users`, {
+      const response = await fetch(`${API_BASE_URL}/admin/users`, {
         headers: {
           'Authorization': `Bearer ${authStore.accessToken}`
         }
@@ -227,7 +228,7 @@ export const useAdminStore = defineStore('admin', () => {
   const fetchStatistics = async () => {
     isLoading.value = true
     try {
-      const response = await fetch(`http://localhost:5000/api/admin/statistics`, {
+      const response = await fetch(`${API_BASE_URL}/admin/statistics`, {
         headers: {
           'Authorization': `Bearer ${authStore.accessToken}`
         }
@@ -298,7 +299,7 @@ const fetchStatisticsOverview = async (timeRange = '30d') => {
   isLoading.value = true
   error.value = null
   try {
-    const response = await fetch(`http://localhost:5000/api/admin/statistics/comprehensive?time_range=${timeRange}`, {
+    const response = await fetch(`${API_BASE_URL}/admin/statistics/comprehensive?time_range=${timeRange}`, {
       headers: {
         'Authorization': `Bearer ${authStore.accessToken}`
       }
@@ -323,7 +324,7 @@ const fetchStatisticsOverview = async (timeRange = '30d') => {
 const fetchRevenueTrends = async (period = 'daily', days = 30) => {
   isLoading.value = true
   try {
-    const response = await fetch(`http://localhost:5000/api/admin/statistics/revenue-trends?period=${period}&days=${days}`, {
+    const response = await fetch(`${API_BASE_URL}/admin/statistics/revenue-trends?period=${period}&days=${days}`, {
       headers: {
         'Authorization': `Bearer ${authStore.accessToken}`
       }
@@ -344,7 +345,7 @@ const fetchRevenueTrends = async (period = 'daily', days = 30) => {
 const fetchPerformanceMetrics = async () => {
   isLoading.value = true
   try {
-    const response = await fetch(`http://localhost:5000/api/admin/statistics/performance-metrics`, {
+    const response = await fetch(`${API_BASE_URL}/admin/statistics/performance-metrics`, {
       headers: {
         'Authorization': `Bearer ${authStore.accessToken}`
       }

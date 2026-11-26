@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-const AUTH_API_URL = 'http://localhost:5000/api/auth'
+import { API_BASE_URL } from '@/services/base-url'
+const AUTH_API_URL = `${API_BASE_URL}/auth`
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
@@ -60,7 +61,7 @@ export const useAuthStore = defineStore('auth', () => {
     isLoading.value = true
     registrationError.value = null
     try {
-      const response = await fetch(`http://localhost:5000/api/auth/register`, {
+      const response = await fetch(`${API_BASE_URL}/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -89,7 +90,7 @@ export const useAuthStore = defineStore('auth', () => {
     isLoading.value = true
     try {
       if (accessToken.value) {
-        await fetch(`http://localhost:5000/api/auth/logout`, {
+        await fetch(`${API_BASE_URL}/auth/logout`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${accessToken.value}`
@@ -113,7 +114,7 @@ export const useAuthStore = defineStore('auth', () => {
       throw new Error('No refresh token available')
     }
     try {
-      const response = await fetch(`http://localhost:5000/api/auth/refresh`, {
+      const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${refreshToken.value}`
@@ -134,7 +135,7 @@ export const useAuthStore = defineStore('auth', () => {
   const changePassword = async (passwordData) => {
     isLoading.value = true
     try {
-      const response = await fetch(`http://localhost:5000/api/auth/change-password`, {
+      const response = await fetch(`${API_BASE_URL}/auth/change-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

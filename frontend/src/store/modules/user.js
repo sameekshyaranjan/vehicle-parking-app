@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useAuthStore } from './auth'
+import { API_BASE_URL } from '@/services/base-url'
 export const useUserStore = defineStore('user', () => {
   const authStore = useAuthStore()
   const userStats = ref({
@@ -119,7 +120,7 @@ export const useUserStore = defineStore('user', () => {
     isLoading.value = true
     error.value = null
     try {
-      const response = await fetch('http://localhost:5000/api/user/dashboard', {
+      const response = await fetch(`${API_BASE_URL}/user/dashboard`, {
         headers: {
           'Authorization': `Bearer ${authStore.accessToken}`
         }
@@ -153,7 +154,7 @@ export const useUserStore = defineStore('user', () => {
   const searchLocations = async (searchCriteria) => {
     isLoading.value = true
     try {
-      const response = await fetch('http://localhost:5000/api/user/quick-search', {
+      const response = await fetch(`${API_BASE_URL}/user/quick-search`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -193,7 +194,7 @@ export const useUserStore = defineStore('user', () => {
   const fetchBookingHistory = async (page = 1, perPage = 20) => {
     isLoading.value = true
     try {
-      const response = await fetch(`http://localhost:5000/api/user/my-bookings?page=${page}&per_page=${perPage}`, {
+      const response = await fetch(`${API_BASE_URL}/user/my-bookings?page=${page}&per_page=${perPage}`, {
         headers: {
           'Authorization': `Bearer ${authStore.accessToken}`
         }
@@ -218,7 +219,7 @@ export const useUserStore = defineStore('user', () => {
   const extendBooking = async (bookingId, additionalHours) => {
     isLoading.value = true
     try {
-      const response = await fetch(`http://localhost:5000/api/user/extend-booking/${bookingId}`, {
+      const response = await fetch(`${API_BASE_URL}/user/extend-booking/${bookingId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -253,7 +254,7 @@ export const useUserStore = defineStore('user', () => {
     console.log(`Attempting to release booking #${bookingId} with rating: ${rating}`);
     console.log('Request Body:', JSON.stringify(requestBody));
     try {
-      const response = await fetch(`http://localhost:5000/api/user/release-parking/${bookingId}`, {
+      const response = await fetch(`${API_BASE_URL}/user/release-parking/${bookingId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -284,7 +285,7 @@ export const useUserStore = defineStore('user', () => {
   const fetchStatistics = async () => {
     isLoading.value = true
     try {
-      const response = await fetch('http://localhost:5000/api/user/statistics', {
+      const response = await fetch(`${API_BASE_URL}/user/statistics`, {
         headers: {
           'Authorization': `Bearer ${authStore.accessToken}`
         }
@@ -331,7 +332,7 @@ export const useUserStore = defineStore('user', () => {
     isLoading.value = true
     error.value = null
     try {
-      const response = await fetch(`http://localhost:5000/api/user/statistics/detailed?time_range=${timeRange}`, {
+      const response = await fetch(`${API_BASE_URL}/user/statistics/detailed?time_range=${timeRange}`, {
         headers: {
           'Authorization': `Bearer ${authStore.accessToken}`
         }
@@ -359,7 +360,7 @@ export const useUserStore = defineStore('user', () => {
    const exportUserReport = async () => {
     isLoading.value = true
     try {
-      const response = await fetch('http://localhost:5000/api/user/export-history', {
+      const response = await fetch(`${API_BASE_URL}/user/export-history`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${authStore.accessToken}`
@@ -394,7 +395,7 @@ const exportBookingHistory = async () => {
     isLoading.value = true
     error.value = null
     try {
-      const response = await fetch('http://localhost:5000/api/user/export-history', {
+      const response = await fetch(`${API_BASE_URL}/user/export-history`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${authStore.accessToken}`

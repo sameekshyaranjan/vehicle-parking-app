@@ -137,15 +137,16 @@ npm.cmd ci
 The default settings are sufficient for a local run. Flask loads optional values
 from a root `.env` file. It reads `DATABASE_URL`, `SQLALCHEMY_DATABASE_URI`, `SECRET_KEY`,
 `JWT_SECRET_KEY`, `REDIS_URL`, `CELERY_BROKER_URL`, and `CELERY_RESULT_BACKEND`.
-The default Redis endpoint is `localhost:6379`. The Flask API uses port 5000
-and the Vue development server uses port 8080.
+The default Redis endpoint is `localhost:6379`. Set `REDIS_URL` to an empty
+value to disable caching. Flask defaults to port 5000 and the Vue development
+server uses port 8080.
 
 ## Usage
 
 Start Flask from the project root:
 
 ```powershell
-.\.venv\Scripts\python.exe -m flask --app run run --host 127.0.0.1 --port 5000
+.\.venv\Scripts\python.exe -m flask --app run run --host 127.0.0.1
 ```
 
 Start Vue from the project root in a second PowerShell terminal:
@@ -223,6 +224,12 @@ $env:PARKSMART_TEST_APP_DATABASE_URL = $connections.integrationApp
 ### Cut over or roll back
 
 After approval, stop Flask and its workers, take a fresh SQLite backup, apply the MySQL migrations to the designated database, and import and verify the backup. Configure Flask and the worker with the **runtime** URL in `SQLALCHEMY_DATABASE_URI`. Keep JWT and Flask secrets. Clear or isolate cached parking data before restarting. To demo the trigger, sign in as a user, book and release a spot, then open **Reservation Activity** on the admin dashboard.
+
+If another app uses port 5000, set `FLASK_RUN_PORT` in the root `.env` and set
+`VUE_APP_API_BASE_URL` in `frontend/.env.local` to the matching URL, including
+`/api` (for example, `http://127.0.0.1:5001/api`). Restart both development
+servers after changing those files. Keep the backend on loopback with
+`FLASK_RUN_HOST=127.0.0.1` and `FLASK_DEBUG=0` in the local configuration.
 
 To roll back before MySQL receives writes, stop Flask and its workers, restore the previous SQLite connection settings, clear the parking cache, and restart. If MySQL has accepted writes, stop writes and dump the database with `mysqldump --single-transaction --triggers` before reconciling those records with SQLite. Keep the original SQLite database and its backups.
 

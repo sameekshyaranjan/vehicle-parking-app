@@ -34,16 +34,17 @@ def create_app(config_name='development'):
     app.config['REDIS_URL'] = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
     app.config['CELERY_BROKER_URL'] = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/0')
     app.config['CELERY_RESULT_BACKEND'] = os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/1')
-    try:
-        app.redis = redis.from_url(app.config['REDIS_URL'])
-        if app.redis.ping():
-            print("✅ Successfully connected to Redis!")
-    except redis.exceptions.ConnectionError as e:
-        print(f"❌ Could not connect to Redis: {e}")
-        app.redis = None
-    except Exception as e:
-        print(f"An error occurred during Redis initialization: {e}")
-        app.redis = None
+    app.redis = None
+    if app.config['REDIS_URL']:
+        try:
+            client = redis.from_url(app.config['REDIS_URL'])
+            if client.ping():
+                app.redis = client
+                print("✅ Successfully connected to Redis!")
+        except redis.exceptions.ConnectionError as e:
+            print(f"❌ Could not connect to Redis: {e}")
+        except Exception as e:
+            print(f"An error occurred during Redis initialization: {e}")
     initialize_extensions(app)
     CORS(app)
     register_blueprints(app)

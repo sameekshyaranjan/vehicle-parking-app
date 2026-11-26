@@ -2,13 +2,14 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router'
 import { createPinia } from 'pinia'
+import { API_BASE_URL } from './services/base-url'
 import './assets/styles/global.css'
 const pinia = createPinia()
 const app = createApp(App)
 app.config.globalProperties.$appConfig = {
     name: 'Vehicle Parking App V2',
     version: '2.0.0',
-    apiBaseUrl: process.env.VUE_APP_API_BASE_URL || 'http://localhost:5000/api',
+    apiBaseUrl: API_BASE_URL,
     theme: {
         primary: '#000133',
         secondary: '#4B006E',

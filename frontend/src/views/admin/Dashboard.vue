@@ -225,6 +225,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/modules/auth'
 import { useAdminStore } from '@/store/modules/admin'
+import { API_BASE_URL } from '@/services/base-url'
 export default {
   name: 'AdminDashboard',
   setup() {
@@ -268,7 +269,7 @@ export default {
     )
     const fetchReservationAudit = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/admin/reservation-audit', {
+        const response = await fetch(`${API_BASE_URL}/admin/reservation-audit`, {
           headers: { Authorization: `Bearer ${authStore.accessToken}` }
         })
         if (response.status === 404) {

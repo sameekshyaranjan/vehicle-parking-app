@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useAuthStore } from './auth'
+import { API_BASE_URL } from '@/services/base-url'
 export const useParkingStore = defineStore('parking', () => {
   const authStore = useAuthStore()
   const availableLots = ref([])
@@ -47,7 +48,7 @@ export const useParkingStore = defineStore('parking', () => {
     isLoading.value = true
     error.value = null
     try {
-      const response = await fetch(`http://localhost:5000/api/user/parking-lots`, {
+      const response = await fetch(`${API_BASE_URL}/user/parking-lots`, {
         headers: {
           'Authorization': `Bearer ${authStore.accessToken}`
         }
@@ -70,7 +71,7 @@ export const useParkingStore = defineStore('parking', () => {
     isLoading.value = true
     error.value = null
     try {
-      const response = await fetch(`http://localhost:5000/api/user/book-parking`, {
+      const response = await fetch(`${API_BASE_URL}/user/book-parking`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -98,7 +99,7 @@ export const useParkingStore = defineStore('parking', () => {
   const fetchBookingHistory = async (page = 1, perPage = 10) => {
     isLoading.value = true
     try {
-      const response = await fetch(`$'http://localhost:5000/api/user/my-bookings?page=${page}&per_page=${perPage}`, {
+      const response = await fetch(`${API_BASE_URL}/user/my-bookings?page=${page}&per_page=${perPage}`, {
         headers: {
           'Authorization': `Bearer ${authStore.accessToken}`
         }
@@ -122,7 +123,7 @@ export const useParkingStore = defineStore('parking', () => {
   }
   const fetchActiveReservation = async () => {
     try {
-      const response = await fetch( 'http://localhost:5000/api/user/active-reservation', {
+      const response = await fetch( `${API_BASE_URL}/user/active-reservation`, {
         headers: {
           'Authorization': `Bearer ${authStore.accessToken}`
         }
@@ -145,7 +146,7 @@ export const useParkingStore = defineStore('parking', () => {
   const exportParkingHistory = async () => {
     isLoading.value = true
     try {
-      const response = await fetch('http://localhost:5000/api/user/export-history', {
+      const response = await fetch(`${API_BASE_URL}/user/export-history`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${authStore.accessToken}`
