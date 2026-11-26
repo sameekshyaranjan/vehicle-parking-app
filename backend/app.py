@@ -108,8 +108,9 @@ def register_commands(app):
         with app.app_context():
             dialect = db.engine.dialect.name
             if dialect != 'sqlite':
-                command = 'db:mysql:deploy' if dialect == 'mysql' else 'db:deploy'
-                raise ClickException(f'Apply the database schema with npm run {command}.')
+                if dialect == 'mysql':
+                    raise ClickException('Load schema.sql into an empty database using the MySQL client.')
+                raise ClickException('Load the SQL scripts in sql/postgresql into an empty PostgreSQL database.')
             db.create_all()
         print("✅ Database tables created successfully!")
     @app.cli.command("create-admin")

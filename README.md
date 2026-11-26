@@ -117,13 +117,13 @@ From the project root in PowerShell:
 ```powershell
 py -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe -m flask --app run init-db
-.\.venv\Scripts\python.exe -m flask --app run create-admin
 ```
 
-The CLI creates `backend/instance/parking.db` by default. It creates a local admin
-account with username `admin` and password `admin123` if no admin exists. Use
-the registration page to create a regular user.
+Set up the database using [the MySQL instructions](#mysql-setup-and-sqlite-import-on-windows).
+After Flask is configured for the target database, `python -m flask --app run create-admin`
+creates a local admin if one is needed. The registration page creates regular accounts.
+For an SQLite development database, the `init-db` command creates the default
+`backend/instance/parking.db` when no other database is configured.
 
 Install the frontend dependencies from the lockfile:
 
@@ -191,52 +191,49 @@ Redis provides caching and backs the optional Celery worker. Account registratio
 parking reservations, and direct CSV download work without a Redis server.
 Automated email and scheduled reporting require further integration in this checkout.
 
-## MySQL migration on Windows
+## MySQL setup and SQLite import on Windows
 
 Install MySQL Community Server 8.4 LTS with the [official Windows MSI](https://dev.mysql.com/downloads/mysql/8.4.html?os=3). Configure a local-only Windows service on `127.0.0.1:3306`, with UTF-8 data using `utf8mb4` and `utf8mb4_0900_bin`. The local rehearsal service provisioned for this workspace is named `ParkSmartMySQL`. Check it with `Get-Service ParkSmartMySQL`; an administrator can run `Start-Service ParkSmartMySQL` if it is stopped.
 
-Use a dedicated MySQL database. Use a migration account with schema and trigger permissions and a separate application account with data access. On the local rehearsal service, binary logging is disabled so the migration account can install the trigger. The runtime account uses the trigger through the definer that installed it.
+Use a dedicated MySQL database. Use a setup account with schema and trigger permissions and a separate application account with data access. On the local MySQL service, binary logging is disabled so the setup account can install the trigger. The runtime account uses the trigger through the definer that installed it.
 
-From the project root in PowerShell, install dependencies and load the rehearsal credentials into **this terminal only**. The workspace setup saved them encrypted for your Windows user. On another computer, set `DATABASE_URL` to the migration account's `mysql://` URL instead. URL-encode passwords that contain special characters.
+For a fresh installation, create an empty database and grant the setup account access to it. From the project root, load `schema.sql` once with the MySQL client. Enter the setup account password at its prompt.
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-npm.cmd ci
+$mysql = Join-Path $env:ProgramFiles 'MySQL\MySQL Server 8.4\bin\mysql.exe'
+& $mysql --host=127.0.0.1 --user=parksmart_migrate --password --database=parksmartapp --execute='SOURCE schema.sql'
+```
+
+[`schema.sql`](schema.sql) creates the five application tables, their foreign keys, the two functional indexes for active reservations, and the release audit trigger. An active reservation has no leaving timestamp. For an existing database with these objects, continue using its current connection settings and data.
+
+Configure Flask with the application account's `mysql://` URL in `SQLALCHEMY_DATABASE_URI` in the ignored root `.env`. Flask also accepts `DATABASE_URL` if that override is unset. URL-encode special characters in passwords.
+
+### Import and rehearse
+
+Load `schema.sql` into a separate empty MySQL database first. In the import terminal, set `DATABASE_URL` to that database using the setup account. The workspace rehearsal credentials are saved encrypted for your Windows user. Use the source path configured by the SQLite app and keep the MySQL target disconnected from the running app during import. The importer verifies rows and auto-increment counters and refuses to overwrite different data.
+
+```powershell
 $vault = Join-Path $env:LOCALAPPDATA 'ParkSmartMySQL\connections.dpapi'
 $secureConnections = (Get-Content -LiteralPath $vault -Raw).Trim() | ConvertTo-SecureString
 $connections = [System.Net.NetworkCredential]::new('', $secureConnections).Password | ConvertFrom-Json
 $env:DATABASE_URL = $connections.rehearsalMigration
-npm.cmd run db:mysql:validate
-npm.cmd run db:mysql:deploy
-npm.cmd run db:mysql:status
-```
-
-The MySQL schema and migrations live in `prisma/mysql`. PostgreSQL has a separate schema and migration history. The MySQL release trigger and the two functional unique indexes are part of the versioned SQL migration. These indexes enforce one active reservation per user and per spot. An active reservation has no leaving timestamp.
-
-### Import and rehearse
-
-Use the source path configured by the running SQLite app. The default is shown below. Keep the target app disconnected while importing. The importer verifies every original row, including timestamps and hashes, and checks that MySQL's auto-increment counters are past the imported IDs. It protects the import from concurrent import commands and refuses to overwrite different data.
-
-```powershell
 $snapshot = 'backend/instance/backups/parksmart-mysql-rehearsal.sqlite3'
 .\.venv\Scripts\python.exe -m scripts.backup_sqlite backend/instance/parking.db $snapshot
 .\.venv\Scripts\python.exe -m scripts.import_sqlite --source $snapshot
 .\.venv\Scripts\python.exe -m scripts.import_sqlite --source $snapshot --verify-only
 ```
 
-For the integration suite, migrate a **separate empty database** and pass the migration and runtime credentials separately. The test writes its own fixture data and exercises both the database guards and the application's workflows.
+For the integration suite, load `schema.sql` into a **separate empty database** and pass the setup and runtime credentials separately. The test writes its own fixture data and exercises both the database guards and the application's workflows.
 
 ```powershell
-$env:DATABASE_URL = $connections.integrationMigration
-npm.cmd run db:mysql:deploy
-$env:PARKSMART_TEST_DATABASE_URL = $env:DATABASE_URL
+$env:PARKSMART_TEST_DATABASE_URL = $connections.integrationMigration
 $env:PARKSMART_TEST_APP_DATABASE_URL = $connections.integrationApp
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
 ### Cut over or roll back
 
-After approval, stop Flask and its workers, take a fresh SQLite backup, apply the MySQL migrations to the designated database, and import and verify the backup. Configure Flask and the worker with the **runtime** URL in `SQLALCHEMY_DATABASE_URI`. Keep JWT and Flask secrets. Clear or isolate cached parking data before restarting. To demo the trigger, sign in as a user, book and release a spot, then open **Reservation Activity** on the admin dashboard.
+After approval, stop Flask and its workers, take a fresh SQLite backup, load `schema.sql` into the designated empty database, and import and verify the backup. Configure Flask and the worker with the **runtime** URL in `SQLALCHEMY_DATABASE_URI`. Keep JWT and Flask secrets. Clear or isolate cached parking data before restarting. To demo the trigger, sign in as a user, book and release a spot, then open **Reservation Activity** on the admin dashboard.
 
 If another app uses port 5000, set `FLASK_RUN_PORT` in the root `.env` and set
 `VUE_APP_API_BASE_URL` in `frontend/.env.local` to the matching URL, including
@@ -249,17 +246,14 @@ To roll back before MySQL receives writes, stop Flask and its workers, restore t
 ## PostgreSQL migration on Windows
 
 Use a PostgreSQL server and a dedicated database for ParkSmart. The role applying
-migrations and running the import needs to own the target tables and sequences.
-Use Node.js 22.12+ on the 22 line or Node.js 24 for the root Prisma tools. The Vue
-dependencies still install separately in `frontend`.
-
-Prisma reads `DATABASE_URL` from the shell or the root `.env`. Flask and its
+the SQL scripts and running the import needs to own the target tables and sequences.
+Flask and its
 Celery worker use `SQLALCHEMY_DATABASE_URI` first, then `DATABASE_URL`, and
 default to `backend/instance/parking.db` if both are unset. Use a plain
 `postgresql://` URL targeting the `public` schema. URL-encode any special
 characters in the password. Flask uses Psycopg for that URL. Keep credentials
-in the environment or the ignored `.env` file. Prisma owns PostgreSQL schema
-changes. Flask's `init-db` command is for SQLite.
+in the environment or the ignored `.env` file. The PostgreSQL schema lives in
+`sql/postgresql`. Flask's `init-db` command is for SQLite.
 
 ### Rehearse the migration
 
@@ -269,13 +263,10 @@ If the running app points elsewhere, use that SQLite path for the backup.
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-npm.cmd ci
 $env:DATABASE_URL = 'postgresql://USER:URL_ENCODED_PASSWORD@localhost:5432/parksmart_rehearsal'
 $snapshot = 'backend/instance/backups/parksmart-rehearsal.sqlite3'
 .\.venv\Scripts\python.exe -m scripts.backup_sqlite backend/instance/parking.db $snapshot
-npm.cmd run db:validate
-npm.cmd run db:deploy
-npm.cmd run db:status
+psql --set=ON_ERROR_STOP=1 --dbname=$env:DATABASE_URL --file=sql/postgresql/01_initial.sql --file=sql/postgresql/02_release_audit.sql
 .\.venv\Scripts\python.exe -m scripts.import_sqlite --source $snapshot
 .\.venv\Scripts\python.exe -m scripts.import_sqlite --source $snapshot --verify-only
 ```
@@ -288,13 +279,13 @@ Existing timestamps remain local wall-clock values with microsecond precision.
 If an admin later removes a spot while resizing a lot, PostgreSQL retains its
 completed reservations and clears their reference to that spot.
 
-To run the integration test suite, apply the Prisma migration to a **separate
+To run the integration test suite, apply both PostgreSQL SQL scripts to a **separate
 empty database** and pass its URL with `PARKSMART_TEST_DATABASE_URL`. The test
 creates and exercises its own data, including concurrent booking requests.
 
 ```powershell
 $env:DATABASE_URL = 'postgresql://USER:URL_ENCODED_PASSWORD@localhost:5432/parksmart_integration'
-npm.cmd run db:deploy
+psql --set=ON_ERROR_STOP=1 --dbname=$env:DATABASE_URL --file=sql/postgresql/01_initial.sql --file=sql/postgresql/02_release_audit.sql
 $env:PARKSMART_TEST_DATABASE_URL = $env:DATABASE_URL
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
@@ -350,7 +341,7 @@ from empty to set. Imported completed reservations do not create events.
 
 ### Demonstrate the PostgreSQL trigger
 
-1. Apply the Prisma migrations with `npm.cmd run db:deploy` on the demo database.
+1. For a fresh demo database load `schema.sql` as shown in the MySQL setup section.
 2. As admin, create a parking lot with an available spot.
 3. As a regular user, book a spot and release it.
 4. Sign in as admin and open **Reservation Activity** on the dashboard. The
